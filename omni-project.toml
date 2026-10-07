@@ -5,7 +5,8 @@
 # in the gitignored users.toml (copy users.toml.example). Tokens live in .env.
 #
 # The CLI discovers this file by searching upward from the current directory,
-# so you can run omni-sync from anywhere in or above the checkout.
+# so you can run omni-sync from anywhere inside the checkout. From elsewhere,
+# pass --config /path/to/omni-project.toml to config-driven commands.
 
 schema_version = 1
 

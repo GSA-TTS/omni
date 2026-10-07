@@ -1,17 +1,14 @@
 """Locate omni-sync config files relative to where the CLI is run.
 
 The CLI may be invoked from any directory. Config is discovered by walking up
-from the current working directory looking for an "omni marker" (any of the
-known config files), falling back to the CWD. This lets a team keep their
-committed omni-project.toml and gitignored users.toml / .env beside their
-checkout rather than inside the installed package.
+from the current working directory looking for the committed
+``omni-project.toml`` marker, falling back to the CWD for a fresh ``init``.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-# Config file names the workspace is expected to contain.
-CONFIG_FILES = ("omni-project.toml", "users.toml", ".env")
+WORKSPACE_MARKER = "omni-project.toml"
 
 # Files whose absence should warn (the ones holding real, local-only data).
 LOCAL_ONLY = ("users.toml", ".env")
@@ -19,12 +16,12 @@ LOCAL_ONLY = ("users.toml", ".env")
 def find_workspace(start: Path | None = None) -> Path:
     """Return the directory holding omni-sync config, searching CWD upward.
 
-    Picks the nearest ancestor containing any CONFIG_FILES; if none is found,
+    Picks the nearest ancestor containing WORKSPACE_MARKER; if none is found,
     returns the starting directory (so a fresh `init` lands in the CWD).
     """
     start = (start or Path.cwd()).resolve()
     for directory in (start, *start.parents):
-        if any((directory / name).exists() for name in CONFIG_FILES):
+        if (directory / WORKSPACE_MARKER).is_file():
             return directory
     return start
 
