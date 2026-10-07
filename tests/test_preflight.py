@@ -1,5 +1,6 @@
 import json
 
+from harness import cli
 from harness.engine.preflight import check_github, check_gitlab, check_jira
 
 
@@ -74,3 +75,22 @@ class TestJira:
     def test_not_visible(self):
         r = check_jira("acli", "NOPE", _runner([(1, "error")]))
         assert not r.ok
+
+
+def test_preflight_uses_gitlab_project_config(mocker, monkeypatch, tmp_path):
+    monkeypatch.delenv("GL_CG_REPO", raising=False)
+    monkeypatch.delenv("CLOUDGOV_GLAB_HOST", raising=False)
+    mocker.patch.object(cli, "_load_dotenv")
+    mocker.patch.object(
+        cli,
+        "load_config",
+        return_value={
+            "gitlab": {"host": "gitlab.example", "project": "group/project"},
+            "jira": {},
+        },
+    )
+    check = mocker.patch.object(cli, "check_gitlab", return_value=type("Result", (), {"ok": True, "target": "gitlab.example", "resource": "group/project", "detail": "ok"})())
+
+    cli.preflight(tmp_path / "omni-project.toml")
+
+    check.assert_called_once_with("gitlab.example", "group/project")

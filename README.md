@@ -189,6 +189,10 @@ export GL_CG_REPO=group/project
 export JIRA_MOD_PROJECT=PROJ
 ```
 
+GitLab defaults come from `[gitlab].host` and `[gitlab].project` in
+`omni-project.toml`. `CLOUDGOV_GLAB_HOST` and `GL_CG_REPO` are optional
+environment overrides, not required parallel configuration.
+
 Each underlying CLI (`gh`, `glab`, `acli`) must already be authenticated
 against its respective host.
 

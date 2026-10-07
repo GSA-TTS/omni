@@ -14,7 +14,8 @@ schema_version = 1
 project_key = "FPDF"
 
 [gitlab]
-project_key = "FPDF"
+host = "workshop.cloud.gov"
+project = "group/project"
 
 [github]
 org = "GSA-TTS"
