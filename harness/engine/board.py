@@ -73,4 +73,3 @@ def _md(value: str) -> str:
 
 def _yaml_quote(value: str) -> str:
     return value.replace("'", "''")
-
