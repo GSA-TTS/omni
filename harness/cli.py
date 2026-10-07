@@ -507,6 +507,54 @@ def mirror(
         raise typer.Exit(code=1)
 
 
+@app.command()
+def bench(
+    target: str = typer.Option("jira-mod", "--target", help="Target to benchmark"),
+    issue_id: str = typer.Option(..., "--id", help="An existing issue/ticket id to read"),
+    runs: int = typer.Option(3, "--runs", help="Repetitions for latency sampling"),
+) -> None:
+    """Measure CLI invocation count and latency for a read of one issue.
+
+    Attaches a CliMetrics collector to the adapter and performs the full
+    `get_issue` path, which for the acli Jira adapter must stay at exactly ONE
+    `workitem view` call per key (regression guard — it used to be 4).
+    """
+    from harness.adapters.base import CliMetrics
+    from harness.testing.bench import OpMetric, render_matrix
+
+    _load_dotenv()
+
+    def build_adapter():
+        # Jira benchmarking uses the acli adapter (the gh-jira flow), not the
+        # jira-cli-based JiraAdapter that `_resolve_adapter` returns.
+        if target == "jira-mod":
+            cfg = load_config(_DEFAULT_CONFIG)
+            return AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
+        return _resolve_adapter(target)
+
+    metrics = CliMetrics()
+    # Fresh adapter per run so the per-key view cache does not mask repeat
+    # work -- we want to measure a cold get_issue each time.
+    for _ in range(max(1, runs)):
+        adapter = build_adapter()
+        adapter.metrics = metrics
+        try:
+            adapter.get_issue(issue_id)
+        except AdapterError as exc:
+            typer.echo(f"FAILED: {exc}", err=True)
+            raise typer.Exit(code=1)
+
+    calls_per_run = metrics.count // max(1, runs)
+    op = OpMetric(
+        provider=target,
+        operation="get_issue",
+        calls=calls_per_run,
+        latencies=[s for _, s in metrics.calls],
+    )
+    typer.echo(render_matrix([op]))
+    typer.echo(f"\nTotal CLI calls: {metrics.count} over {runs} run(s) = {calls_per_run}/run")
+
+
 def main() -> None:
     app()
 

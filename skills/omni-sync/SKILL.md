@@ -26,6 +26,7 @@ are safe.
 | `omni-sync diff <src> <src_id> <tgt> <tgt_id>` | Field-level diff between two issues. |
 | `omni-sync sync <src> <src_id> <tgt> <tgt_id> --direction <dir> --body-mode <mode> [--apply]` | Reconcile drift one-directionally. |
 | `omni-sync mirror [--to <name>...] [--apply]` | Push code to `[mirror]` remotes (HTTPS or SSH). |
+| `omni-sync bench --target <t> --id <issue_id>` | Measure CLI invocation count + latency for a read (regression guard). |
 | `omni-sync gh-jira sync-jira-from-github [--apply]` | Jira ← GitHub: labels, assignee, milestone-as-label, sync comment. |
 | `omni-sync gh-jira backfill-github-from-jira [--apply]` | GitHub ← Jira: assignee backfill only, fail-closed. |
 
