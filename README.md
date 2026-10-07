@@ -83,7 +83,8 @@ make check
 ```
 
 This runs Ruff lint/format checks, mypy, the test suite with a 75% coverage
-floor, and pip-audit against the locked environment.
+floor, pip-audit against the locked environment, and zizmor against all GitHub
+Actions workflows.
 
 ## Authentication
 
@@ -437,6 +438,10 @@ against GitHub, GitLab, or Jira in the standard test suite.
 CI builds a self-bootstrapping [PyApp](https://ofek.dev/pyapp/) binary using
 Python 3.13 for Linux, macOS arm64, and Windows via `uv`. Every platform binary
 must pass an `--help` smoke test before release:
+
+The Linux release runner is pinned to Ubuntu 24.04 LTS rather than following
+the mutable `ubuntu-latest` image. Third-party actions are pinned to immutable
+commit SHAs with version comments and scanned by zizmor.
 
 - **Every merge to `main`** publishes an auto patch release `1.0.<run-number>`.
 - **Pushing a `v1.1.0`-style tag** cuts that exact version (minor/major bump).

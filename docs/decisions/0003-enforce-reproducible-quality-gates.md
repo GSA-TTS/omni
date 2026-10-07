@@ -41,10 +41,14 @@ coverage, or dependency-vulnerability gates. Release binaries also used Python
 ## Decision Outcome
 
 Chosen option: **Use pinned local tools in CI**. `make check` runs Ruff, mypy,
-pytest with coverage, and pip-audit from the locked environment. The initial
-coverage floor is 75%, just below the measured 76% baseline. Development and
-PyApp release builds use Python 3.13, and all release matrix binaries execute an
-`--help` smoke test.
+pytest with coverage, pip-audit, and zizmor. The initial coverage floor is 75%,
+just below the measured 76% baseline. Development and PyApp release builds use
+Python 3.13, and all release matrix binaries execute an `--help` smoke test.
+All third-party actions use immutable commit SHAs with version comments. All
+Linux CI and release jobs use Ubuntu 24.04 LTS instead of the mutable
+`ubuntu-latest` label. Checkout credentials are not persisted, publishing write
+permission is scoped to the release job, and runtime artifacts are published
+with the runner-provided GitHub CLI.
 
 ### Positive Consequences
 
@@ -52,11 +56,14 @@ PyApp release builds use Python 3.13, and all release matrix binaries execute an
 - Static and dependency failures block regressions before merge.
 - Release runtime behavior is aligned across development and artifacts.
 - Windows artifacts receive execution coverage before publication.
+- Workflow dependencies are immutable and statically scanned.
+- Linux runner migrations become explicit reviewable changes.
 
 ### Negative Consequences
 
 - CI and local checks take longer and install additional development tools.
 - Ruff and mypy configuration require maintenance as the codebase evolves.
+- Action and runner updates require deliberate SHA/image updates.
 - Coverage measures executed lines, not correctness or requirement coverage.
 
 ### Compliance Consequences
