@@ -92,6 +92,5 @@ def _apply_patch(
         labels=list(source.labels),
         assignees=list(target.assignees),
         uuid=target.uuid,
-        sync_metadata=dict(target.sync_metadata),
-    )
+        sync_metadata=dict(target.sync_metadata),    )
     adapter.update_issue(target_id, patched)

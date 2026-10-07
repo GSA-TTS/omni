@@ -66,6 +66,8 @@ class GitHubAdapter(BaseIssueAdapter):
             "--body",
             issue.body_with_anchor(),
         ]
+        for label in issue.labels:
+            argv += ["--add-label", label]
         self._run_cli(argv, env_overrides=self._env(), parse_json=False)
 
         if issue.status == "CLOSED":

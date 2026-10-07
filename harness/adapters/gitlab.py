@@ -65,6 +65,8 @@ class GitLabAdapter(BaseIssueAdapter):
             "--description",
             issue.body_with_anchor(),
         ]
+        for label in issue.labels:
+            argv += ["--label", label]
         self._run_cli(argv, env_overrides=self._env(), parse_json=False)
 
         # State changes use dedicated subcommands; `glab issue update` has no

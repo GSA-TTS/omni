@@ -50,6 +50,14 @@ How the source body is written onto the target issue:
 read-modify-write a human's description.** Prefer it when syncing into a
 tracker whose descriptions people edit by hand.
 
+## Label sync
+
+`diff` and `sync` reconcile labels alongside title/body/state. On apply, the
+source's labels are added to the target (`gh issue edit --add-label` /
+`glab issue update --label`). Labels are additive — the sync does not delete
+labels the target already has, so human-added labels on the target are
+preserved. Label *order* never counts as a difference (sorted before compare).
+
 ## Auth is transport-agnostic
 
 Commands behave identically whether `gh`/`glab` were authenticated via web
