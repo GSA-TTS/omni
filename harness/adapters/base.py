@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Literal
 
 from harness.models import CanonicalIssue
@@ -30,7 +31,7 @@ class CliMetrics:
         self.calls: list[tuple[str, float]] = []  # (argv[0..2] joined, seconds)
 
     def record(self, argv: list[str], seconds: float) -> None:
-        self.calls.append((" ".join(argv), seconds))
+        self.calls.append((_command_label(argv), seconds))
 
     @property
     def count(self) -> int:
@@ -96,11 +97,9 @@ class BaseIssueAdapter(ABC):
                 timeout=60,
             )
         except subprocess.CalledProcessError as exc:
-            raise AdapterError(
-                f"Command failed ({' '.join(argv)}): {exc.stderr.strip()}"
-            ) from exc
+            raise AdapterError(f"Command failed ({_command_label(argv)}), exit {exc.returncode}") from exc
         except subprocess.TimeoutExpired as exc:
-            raise AdapterError(f"Command timed out: {' '.join(argv)}") from exc
+            raise AdapterError(f"Command timed out: {_command_label(argv)}") from exc
         finally:
             if self.metrics is not None:
                 self.metrics.record(argv, time.perf_counter() - started)
@@ -113,4 +112,13 @@ class BaseIssueAdapter(ABC):
         try:
             return json.loads(stdout)
         except json.JSONDecodeError as exc:
-            raise AdapterError(f"Non-JSON output from {argv[0]}: {stdout[:200]}") from exc
+            raise AdapterError(f"Non-JSON output from {_command_label(argv)}") from exc
+
+
+def _command_label(argv: list[str]) -> str:
+    """Return a diagnostic operation name without positional IDs or payloads."""
+    if not argv:
+        return "unknown command"
+    executable = Path(argv[0]).name
+    operation_parts = argv[1:4] if executable == "acli" else argv[1:3]
+    return " ".join([executable, *operation_parts])

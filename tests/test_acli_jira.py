@@ -9,6 +9,7 @@ from harness.adapters.acli_jira import (
     find_sync_comment,
     strip_sync_timestamp,
 )
+from harness.adapters.base import AdapterError
 
 
 def _mock_completed(stdout: str) -> subprocess.CompletedProcess:
@@ -93,6 +94,21 @@ class TestAcliJiraAdapter:
         create_argv = run_mock.call_args_list[1].args[0]
         assert "create" in create_argv
 
+    def test_list_comments_fails_closed_on_cli_error(self, mocker):
+        mocker.patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, ["acli"], stderr="unauthorized"),
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+        with pytest.raises(AdapterError, match="Command failed"):
+            adapter.list_comments("FPDF-402")
+
+    def test_list_comments_rejects_malformed_response(self, mocker):
+        mocker.patch("subprocess.run", return_value=_mock_completed("{}"))
+        adapter = AcliJiraAdapter("acli", "FPDF")
+        with pytest.raises(AdapterError, match="Invalid comment list response"):
+            adapter.list_comments("FPDF-402")
+
 
 class TestSyncComment:
     def test_find_sync_comment_matches_marker_not_author(self):
@@ -105,6 +121,14 @@ class TestSyncComment:
 
     def test_find_sync_comment_returns_none_when_absent(self):
         assert find_sync_comment([{"id": "1", "body": "nope"}]) is None
+
+    def test_find_sync_comment_rejects_duplicate_markers(self):
+        comments = [
+            {"id": "1", "body": "[github-sync] first"},
+            {"id": "2", "body": "[github-sync] second"},
+        ]
+        with pytest.raises(AdapterError, match="Multiple managed Jira sync comments"):
+            find_sync_comment(comments)
 
     def test_strip_sync_timestamp_removes_marker_line(self):
         body = "[github-sync] Last synced from GitHub: 2026-01-01T00:00:00Z\nState: open"
