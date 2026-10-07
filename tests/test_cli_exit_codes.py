@@ -48,7 +48,10 @@ def test_pr_exits_nonzero_after_partial_failure(mocker):
     assert raised.value.exit_code == 1
 
 
-def test_github_to_jira_sync_exits_nonzero_after_ticket_failure(mocker, tmp_path):
+def test_github_to_jira_sync_exits_nonzero_after_ticket_failure(
+    mocker, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("JIRA_COMMENT_AUTHOR", "Sync User")
     config = {
         "github": {"org": "example", "repos": ["repo"]},
         "jira": {"project_key": "TEST", "acli_bin": "acli"},
@@ -60,7 +63,7 @@ def test_github_to_jira_sync_exits_nonzero_after_ticket_failure(mocker, tmp_path
     mocker.patch.object(cli, "_load_dotenv")
     mocker.patch.object(cli, "load_config", return_value=config)
     mocker.patch.object(cli, "GitHubRestAdapter", return_value=gh)
-    mocker.patch.object(cli, "AcliJiraAdapter", return_value=object())
+    jira_adapter = mocker.patch.object(cli, "AcliJiraAdapter", return_value=object())
     mocker.patch.object(
         cli,
         "sync_jira_from_github",
@@ -79,6 +82,9 @@ def test_github_to_jira_sync_exits_nonzero_after_ticket_failure(mocker, tmp_path
         cli.sync_jira_from_github_cmd(tmp_path / "config.toml", None, [], 0, False)
 
     assert raised.value.exit_code == 1
+    jira_adapter.assert_called_once_with(
+        "acli", "TEST", expected_comment_author="Sync User"
+    )
 
 
 def test_jira_to_github_backfill_exits_nonzero_after_write_failure(mocker, tmp_path):

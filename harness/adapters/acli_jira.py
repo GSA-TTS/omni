@@ -14,7 +14,6 @@ prefixed Jira label (see config.milestone_label).
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import UTC, datetime
 
@@ -32,9 +31,15 @@ class AcliJiraAdapter(BaseIssueAdapter):
     description field. Milestones arrive pre-encoded as labels by the caller.
     """
 
-    def __init__(self, acli_bin: str = "acli", project_key: str = "FPDF"):
+    def __init__(
+        self,
+        acli_bin: str = "acli",
+        project_key: str = "FPDF",
+        expected_comment_author: str | None = None,
+    ):
         self.acli_bin = acli_bin
         self.project_key = project_key
+        self.expected_comment_author = (expected_comment_author or "").strip()
         self._view_cache: dict[str, dict | None] = {}
 
     # ---- reads -------------------------------------------------------------
@@ -269,13 +274,12 @@ class AcliJiraAdapter(BaseIssueAdapter):
         """
         existing = find_sync_comment(self.list_comments(issue_id))
         if existing:
-            expected_author = os.environ.get("JIRA_COMMENT_AUTHOR", "").strip()
             actual_author = str(existing.get("author") or "").strip()
-            if not expected_author:
+            if not self.expected_comment_author:
                 raise AdapterError(
                     "JIRA_COMMENT_AUTHOR is required to update a managed Jira comment"
                 )
-            if actual_author != expected_author:
+            if actual_author != self.expected_comment_author:
                 raise AdapterError(
                     "Managed Jira comment author does not match JIRA_COMMENT_AUTHOR; "
                     "refusing update"
