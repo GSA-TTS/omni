@@ -33,8 +33,9 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     def __init__(
         self,
-        acli_bin: str = "acli",
-        project_key: str = "FPDF",
+        acli_bin: str,
+        project_key: str,
+        *,
         expected_comment_author: str | None = None,
     ):
         self.acli_bin = acli_bin
