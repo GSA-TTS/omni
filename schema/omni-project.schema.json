@@ -28,7 +28,6 @@
       "additionalProperties": false,
       "properties": {
         "host": {"type": "string", "minLength": 1},
-        "project_key": {"type": "string", "minLength": 1},
         "project": {"type": "string", "minLength": 1}
       }
     },

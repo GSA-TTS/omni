@@ -28,6 +28,7 @@ from harness.engine.reconciler import reconcile
 from harness.identity import UserRoster
 from harness.models import CanonicalIssue, IssueQuery
 from harness.resources import resource_text
+from harness.targets import resolve_gitlab_target
 from harness.workspace import (
     LOCAL_ONLY,
     config_path,
@@ -150,6 +151,12 @@ def _resolve_adapter(target: str) -> BaseIssueAdapter:
     _load_dotenv()
     if target not in _ADAPTER_BUILDERS:
         raise typer.BadParameter(f"Unknown target '{target}'. Valid: {', '.join(_ADAPTER_BUILDERS)}")
+    if target == "gl-cg":
+        cfg = load_config(_runtime_config())
+        host, resource = resolve_gitlab_target(cfg)
+        if not resource:
+            raise typer.BadParameter("Set [gitlab].project or GL_CG_REPO for target 'gl-cg'")
+        return GitLabAdapter(host, resource)
     resource_env = _TARGET_RESOURCE_ENV[target]
     resource = os.environ.get(resource_env)
     if not resource:
@@ -598,15 +605,15 @@ def preflight(
     tts = os.environ.get("GH_TTS_REPO")
     if tts:
         results.append(check_github(os.environ.get("GITHUB_PUBLIC_HOST", "github.com"), tts))
-    glcg = os.environ.get("GL_CG_REPO")
+    gitlab_host, glcg = resolve_gitlab_target(cfg)
     if glcg:
-        results.append(check_gitlab(os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov"), glcg))
+        results.append(check_gitlab(gitlab_host, glcg))
     jira_project = os.environ.get("JIRA_MOD_PROJECT") or cfg.get("jira", {}).get("project_key")
     if jira_project:
         results.append(check_jira(cfg.get("jira", {}).get("acli_bin", "acli"), jira_project))
 
     if not results:
-        typer.echo("No targets configured (set GH_HELIX_REPO / GH_TTS_REPO / GL_CG_REPO / JIRA_MOD_PROJECT)", err=True)
+        typer.echo("No targets configured in omni-project.toml or environment overrides", err=True)
         raise typer.Exit(code=1)
 
     any_fail = False

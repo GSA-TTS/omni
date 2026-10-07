@@ -13,6 +13,7 @@ from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
 from harness.identity import UserRoster
 from harness.models import IssueQuery, OpenIssue
+from harness.targets import resolve_gitlab_target
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,7 @@ def _resource_from_config(target: str, cfg: dict) -> str | None:
     if target == "gh-tts" and cfg.get("github", {}).get("repos"):
         repo = str(cfg["github"]["repos"][0])
         return repo if "/" in repo else f"{cfg['github']['org']}/{repo}"
-    return cfg.get("gitlab", {}).get("project") if target == "gl-cg" else None
+    return resolve_gitlab_target(cfg)[1] if target == "gl-cg" else None
 
 
 def render_boards(

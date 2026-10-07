@@ -80,3 +80,14 @@ repos = []
 """
     with pytest.raises(SystemExit):
         validate_config(_cfg(bad))
+
+
+def test_gitlab_host_and_project_are_supported():
+    cfg = _cfg(_VALID + '\n[gitlab]\nhost = "gitlab.example"\nproject = "group/project"\n')
+    validate_config(cfg)
+
+
+def test_obsolete_gitlab_project_key_is_rejected():
+    cfg = _cfg(_VALID + '\n[gitlab]\nproject_key = "LEGACY"\n')
+    with pytest.raises(SystemExit, match="Additional properties"):
+        validate_config(cfg)

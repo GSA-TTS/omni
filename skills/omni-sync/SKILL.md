@@ -80,7 +80,9 @@ roster to translate provider usernames and fail closed when a mapping is absent.
 
 Targets: `gh-tts` (github.com), `gh-helix` (GHES), `gl-cg` (GitLab cloud.gov),
 `jira-mod` (FedRAMP Jira). Repos/projects come from env vars (`GH_TTS_REPO`,
-`GH_HELIX_REPO`, `GL_CG_REPO`, `JIRA_MOD_PROJECT`) or `.env`.
+`GH_HELIX_REPO`, `GL_CG_REPO`, `JIRA_MOD_PROJECT`) or `.env`. GitLab also uses
+`[gitlab].host` and `[gitlab].project` as authoritative defaults; environment
+values override them when set.
 
 **Defaults are safe:** `sync` and the `gh-jira` commands default to `--dry-run`.
 Pass `--apply` to write.
