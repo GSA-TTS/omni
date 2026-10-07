@@ -43,6 +43,10 @@ def sync_jira_from_github(
         "errors": [],
     }
 
+    if not jira.exists(key):
+        result["actions"].append("skip (Jira key not found/visible)")
+        return result
+
     status_cat = jira.status_category(key)
     if status_cat in (cfg["sync"].get("jira_skip_status_categories") or []):
         result["actions"].append(f"skip (Jira status={status_cat})")

@@ -40,6 +40,9 @@ class FakeJira:
         self.edits: list[dict] = []
         self.comment_writes: list[str] = []
 
+    def exists(self, key):
+        return True
+
     def status_category(self, key):
         return self._status
 

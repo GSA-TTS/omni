@@ -224,6 +224,16 @@ each issue body:
 The diff engine strips this footer before comparing bodies so link metadata
 never produces a false-positive delta.
 
+## Verifying setup
+
+`doctor` is a read-only check that confirms the provider CLIs are installed
+and authenticated, the config parses, and the Jira token is present. It
+auto-loads `.env`, so `GITLAB_TOKEN` / `JIRA_API_TOKEN` set there are picked up:
+
+```sh
+uv run omni-sync doctor
+```
+
 ## Testing
 
 ```sh

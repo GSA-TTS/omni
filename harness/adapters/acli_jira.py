@@ -33,15 +33,37 @@ class AcliJiraAdapter(BaseIssueAdapter):
     def __init__(self, acli_bin: str = "acli", project_key: str = "FPDF"):
         self.acli_bin = acli_bin
         self.project_key = project_key
+        self._view_cache: dict[str, dict | None] = {}
 
     # ---- reads -------------------------------------------------------------
 
+    def _view(self, issue_id: str) -> dict | None:
+        """Fetch (and cache) a workitem's fields, returning None if missing/forbidden.
+
+        A single view per key avoids 4 redundant `acli` calls per ticket and
+        lets a GitHub reference to a nonexistent Jira key be skipped instead
+        of crashing the whole run.
+        """
+        if issue_id in self._view_cache:
+            return self._view_cache[issue_id]
+        try:
+            data = self._run_cli(
+                [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+            )
+        except AdapterError:
+            data = None
+        result = data if isinstance(data, dict) else None
+        self._view_cache[issue_id] = result
+        return result
+
+    def exists(self, issue_id: str) -> bool:
+        """Whether the Jira key is visible to the current user."""
+        return self._view(issue_id) is not None
+
     def get_issue(self, issue_id: str) -> CanonicalIssue:
-        data = self._run_cli(
-            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
-        )
-        if not isinstance(data, dict):
-            raise AdapterError(f"Unexpected acli workitem view output for {issue_id}")
+        data = self._view(issue_id)
+        if data is None:
+            raise AdapterError(f"Jira workitem {issue_id} does not exist or is not visible")
         fields = data.get("fields", {})
         status_cat = ((fields.get("status") or {}).get("statusCategory") or {}).get("name")
         assignee = fields.get("assignee") or {}
@@ -55,26 +77,20 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     def status_category(self, issue_id: str) -> str | None:
         """Return the raw Jira status category name (e.g. 'Done') or None."""
-        data = self._run_cli(
-            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
-        )
-        if not isinstance(data, dict):
+        data = self._view(issue_id)
+        if data is None:
             return None
         return (((data.get("fields") or {}).get("status") or {}).get("statusCategory") or {}).get("name")
 
     def labels(self, issue_id: str) -> set[str]:
-        data = self._run_cli(
-            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
-        )
-        if not isinstance(data, dict):
+        data = self._view(issue_id)
+        if data is None:
             return set()
         return set((data.get("fields") or {}).get("labels") or [])
 
     def current_assignee_email(self, issue_id: str) -> str | None:
-        data = self._run_cli(
-            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
-        )
-        if not isinstance(data, dict):
+        data = self._view(issue_id)
+        if data is None:
             return None
         return ((data.get("fields") or {}).get("assignee") or {}).get("emailAddress")
 

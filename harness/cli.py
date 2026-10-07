@@ -26,6 +26,24 @@ from harness.models import CanonicalIssue
 
 app = typer.Typer(help="Unified issue CLI across GitHub, GitHub Enterprise, GitLab, and Jira.")
 
+
+def _load_dotenv(path: Path | None = None) -> None:
+    """Load KEY=VALUE lines from .env into os.environ without overriding existing values.
+
+    Lets `glab`/`acli` pick up GITLAB_TOKEN/JIRA_API_TOKEN from the gitignored
+    .env the same way the shell would, without a third-party dependency.
+    """
+    env_path = path or (Path(__file__).resolve().parent.parent / ".env")
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+
+
 # Target registry: lazily constructed so missing env vars only error if the
 # target is actually used.
 _TARGET_FACTORIES: dict[str, type] = {}
@@ -175,6 +193,7 @@ def sync_jira_from_github_cmd(
     Never writes the Jira description field. GitHub is authoritative for
     engineering execution state.
     """
+    _load_dotenv()
     cfg = load_config(config)
     gh = GitHubRestAdapter(cfg["github"]["org"], cfg["jira"].get("project_key", "FPDF"))
     jira = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
@@ -220,6 +239,7 @@ def backfill_github_from_jira_cmd(
     Only acts when GitHub has no assignee, the Jira ticket is non-Done and
     assigned, and the Jira assignee maps to a known GitHub login.
     """
+    _load_dotenv()
     cfg = load_config(config)
     gh = GitHubRestAdapter(cfg["github"]["org"], cfg["jira"].get("project_key", "FPDF"))
     jira = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
@@ -267,6 +287,105 @@ def backfill_github_from_jira_cmd(
 
     if dry_run:
         typer.echo("\n(dry run - no changes written; use --apply to backfill)")
+
+
+@app.command()
+def doctor(
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+) -> None:
+    """Verify provider CLI auth and config without mutating anything.
+
+    Checks that gh/glab/acli are installed and authenticated for the hosts
+    this project targets, that sync_config.toml parses, and that the Jira
+    API token is present. Read-only.
+    """
+    import shutil
+    import subprocess
+
+    ok = True
+
+    _load_dotenv()
+
+    def check(label: str, passed: bool, detail: str = "") -> None:
+        nonlocal ok
+        mark = "OK  " if passed else "FAIL"
+        ok = ok and passed
+        typer.echo(f"[{mark}] {label}" + (f" — {detail}" if detail else ""))
+
+    def cli_present(name: str) -> bool:
+        return shutil.which(name) is not None
+
+    def run_quiet(argv: list[str]) -> tuple[int, str]:
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+            return r.returncode, (r.stdout + r.stderr).strip()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return 1, str(exc)
+
+    def run_quiet_env(argv: list[str], extra_env: dict[str, str]) -> tuple[int, str]:
+        try:
+            r = subprocess.run(
+                argv, capture_output=True, text=True, timeout=30, env={**os.environ, **extra_env}
+            )
+            return r.returncode, (r.stdout + r.stderr).strip()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return 1, str(exc)
+
+    typer.echo("omni-sync doctor\n")
+
+    # --- CLIs installed ---
+    gh_ok = cli_present("gh")
+    glab_ok = cli_present("glab")
+    acli_ok = cli_present("acli")
+    check("gh installed", gh_ok)
+    check("glab installed", glab_ok)
+    check("acli installed", acli_ok)
+
+    # --- gh auth (github.com + Helix) ---
+    if gh_ok:
+        public_host = os.environ.get("GITHUB_PUBLIC_HOST", "github.com")
+        helix_host = os.environ.get("HELIX_GH_HOST", "github.helix.gsa.gov")
+        rc, _ = run_quiet(["gh", "auth", "status", "--hostname", public_host])
+        check(f"gh authenticated ({public_host})", rc == 0)
+        rc, _ = run_quiet(["gh", "auth", "status", "--hostname", helix_host])
+        check(f"gh authenticated ({helix_host})", rc == 0, "" if rc == 0 else "run: gh auth login --hostname " + helix_host)
+
+    # --- glab auth ---
+    if glab_ok:
+        glab_host = os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov")
+        rc, _ = run_quiet(["glab", "auth", "status", "--hostname", glab_host])
+        if rc != 0 and os.environ.get("GITLAB_TOKEN"):
+            # glab auth status ignores GITLAB_TOKEN; confirm the env token works via an API call.
+            rc, _ = run_quiet_env(["glab", "api", "user"], {"GITLAB_HOST": glab_host})
+            detail = "via GITLAB_TOKEN" if rc == 0 else "GITLAB_TOKEN set but API call failed"
+            check(f"glab authenticated ({glab_host})", rc == 0, detail)
+        else:
+            check(f"glab authenticated ({glab_host})", rc == 0, "" if rc == 0 else "run: glab auth login --hostname " + glab_host)
+
+    # --- acli auth ---
+    if acli_ok:
+        rc, out = run_quiet(["acli", "jira", "auth", "status"])
+        check("acli authenticated", rc == 0 and "Authenticated" in out)
+
+    # --- config parses ---
+    try:
+        cfg = load_config(config)
+        check(f"config parses ({config.name})", True)
+        repos = cfg.get("github", {}).get("repos", [])
+        check("config: github.repos non-empty", bool(repos), f"{len(repos)} repo(s)")
+        check("config: jira.project_key set", bool(cfg.get("jira", {}).get("project_key")))
+    except SystemExit as exc:
+        check(f"config parses ({config.name})", False, str(exc))
+
+    # --- Jira token present (never printed) ---
+    check("JIRA_API_TOKEN in env", bool(os.environ.get("JIRA_API_TOKEN")), "set in .env (gitignored)" if os.environ.get("JIRA_API_TOKEN") else "copy .env.example to .env")
+
+    typer.echo("")
+    if ok:
+        typer.echo("All checks passed.")
+    else:
+        typer.echo("Some checks failed — see above.")
+        raise typer.Exit(code=1)
 
 
 def main() -> None:
