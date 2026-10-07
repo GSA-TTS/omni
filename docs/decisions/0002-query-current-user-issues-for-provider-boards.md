@@ -28,6 +28,8 @@ diagram, while Omni must link cards to different provider hosts.
 - Issue text is external input and must not break generated Mermaid or Markdown.
 - Every card must resolve to its provider's direct issue URL.
 - One provider failure must not suppress results from independent providers.
+- Agents and humans need one self-contained, durable context artifact.
+- Filters must use a predictable subset available across all four providers.
 
 ## Considered Options
 
@@ -40,9 +42,13 @@ diagram, while Omni must link cards to different provider hosts.
 ## Decision Outcome
 
 Chosen option: **Four provider-specific Mermaid boards**. Each adapter lists
-open issues authored by or assigned to its authenticated current user. Results
+issues using a shared relationship, user, state, label, and text-filter model.
+The default user is the identity authenticated by each provider CLI; explicit
+email identities resolve through the local roster where host usernames differ.
+Results
 are normalized, deduplicated per provider, escaped, truncated for cards, and
-rendered with a direct-link details table below each board. Optional `[board]`
+written to one Markdown artifact with filter metadata, totals, provider errors,
+and a direct-link details table below each board. Optional `[board]`
 ticket-base URLs are authoritative when configured; otherwise safe defaults are
 derived from the selected provider host and resource.
 
@@ -50,6 +56,7 @@ derived from the selected provider host and resource.
 
 - Cards link correctly across all configured hosts.
 - Queries remain read-only and scoped to the authenticated user.
+- One file can be consumed as agent context or reviewed directly by a human.
 - Partial results remain available when one provider is unavailable.
 - Deterministic sorting makes generated reports reviewable.
 
@@ -58,6 +65,7 @@ derived from the selected provider host and resource.
 - Authored and assigned queries can require two provider calls.
 - Four diagrams are longer than one combined board.
 - Provider CLI response formats remain an integration boundary requiring tests.
+- Only filters with stable equivalents across all providers are exposed.
 
 ### Compliance Consequences
 

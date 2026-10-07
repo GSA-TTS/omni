@@ -22,7 +22,7 @@ are safe.
 | `omni-sync doctor` | Read-only: verify CLI install + auth, config parse, token presence. Run first. |
 | `omni-sync preflight` | Read-only: verify each configured target exists, has issues enabled, and is writable. Run before create/sync. |
 | `omni-sync create <title> <body> --to <target>...` | Create the same issue on 1+ targets. |
-| `omni-sync board [--output <path>]` | Render four Mermaid boards of open issues authored by or assigned to the authenticated user. |
+| `omni-sync board [filters]` | Write one consolidated Markdown issue-context file with provider boards and linked details. |
 | `omni-sync pr <title> --base <b> --head <h> --to <target>...` | Open the same PR/MR across GitHub/GitLab targets (`--draft` supported). |
 | `omni-sync diff <src> <src_id> <tgt> <tgt_id>` | Field-level diff between two issues. |
 | `omni-sync sync <src> <src_id> <tgt> <tgt_id> --direction <dir> --body-mode <mode> [--apply]` | Reconcile drift one-directionally. |
@@ -42,10 +42,12 @@ Batch commands are best-effort: they report all independent results, then exit
 with code `1` if any target or ticket failed. Exit code `0` means the complete
 requested batch succeeded.
 
-`board` emits separate GitHub.com, GitHub Helix, GitLab, and Jira Mermaid
-Kanban blocks. Each block uses its provider-specific configured issue URL so
-ticket links resolve directly. The details table under each board includes the
-title, body excerpt, labels, and direct issue link.
+`board` writes `open-issues.md` by default. The single artifact includes report
+metadata, applied filters, totals, provider failures, separate GitHub.com,
+GitHub Helix, GitLab, and Jira Mermaid Kanban blocks, and linked detail tables.
+Filter with repeatable `--relationship`, `--user`, `--label`, and `--target`, or
+with `--state`, `--search`, `--limit`, and `--body-limit`. Each board uses its
+provider-specific configured issue URL so ticket links resolve directly.
 
 ## `--body-mode` (sync)
 

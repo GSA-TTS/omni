@@ -21,12 +21,12 @@ from harness.engine.gh_jira_sync import (
     plan_backfill_github_from_jira,
     sync_jira_from_github,
 )
-from harness.engine.board import IssueBoard, render_boards
+from harness.engine.board import collect_boards, render_boards
 from harness.engine.mirror import GitMirror
 from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
 from harness.identity import UserRoster
-from harness.models import CanonicalIssue, OpenIssue
+from harness.models import CanonicalIssue, IssueQuery
 from harness.resources import resource_text
 from harness.workspace import (
     LOCAL_ONLY,
@@ -188,90 +188,62 @@ def create(
 @app.command()
 def board(
     config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
-    output: Path | None = typer.Option(None, "--output", help="Write Markdown to this path"),
+    output: Path = typer.Option(Path("open-issues.md"), "--output", help="Consolidated Markdown report path"),
+    relationship: list[str] = typer.Option(None, "--relationship", help="authored or assigned; repeatable (default: both)"),
+    user: list[str] = typer.Option(None, "--user", help="@me, roster email, or provider username; repeatable"),
+    state: str = typer.Option("open", "--state", help="open, closed, or all"),
+    label: list[str] = typer.Option(None, "--label", help="Require label; repeatable (AND semantics)"),
+    search: str | None = typer.Option(None, "--search", help="Search issue title and body"),
+    target: list[str] = typer.Option(None, "--target", help="Provider target; repeatable (default: all four)"),
     limit: int = typer.Option(100, "--limit", help="Maximum issues per authored/assigned query"),
     body_limit: int = typer.Option(180, "--body-limit", help="Maximum body characters per card"),
 ) -> None:
-    """Render open issues authored by or assigned to the current user."""
+    """Write one agent- and human-readable Markdown issue report."""
     if limit < 1:
         raise typer.BadParameter("limit must be at least 1")
+    if limit > 100:
+        raise typer.BadParameter("limit cannot exceed 100")
     if body_limit < 1:
         raise typer.BadParameter("body-limit must be at least 1")
+    relationships = tuple(relationship or ("authored", "assigned"))
+    users = tuple(user or ("@me",))
+    labels = tuple(label or ())
+    selected_targets = tuple(target or ("gh-tts", "gh-helix", "gl-cg", "jira-mod"))
+    invalid_relationships = sorted(set(relationships) - {"authored", "assigned"})
+    invalid_targets = sorted(set(selected_targets) - set(_TARGET_RESOURCE_ENV))
+    if invalid_relationships:
+        raise typer.BadParameter(f"invalid relationship: {', '.join(invalid_relationships)}")
+    if state not in {"open", "closed", "all"}:
+        raise typer.BadParameter("state must be open, closed, or all")
+    if invalid_targets:
+        raise typer.BadParameter(f"invalid target: {', '.join(invalid_targets)}")
 
     config = _runtime_config(config)
     _load_dotenv(config.parent / ".env")
     cfg = load_config(config)
-    jira_url = cfg["jira"].get("base_url") or os.environ.get("JIRA_INSTANCE_URL")
-    board_urls = cfg.get("board", {})
-    targets = [
-        ("GitHub.com", "github_com", "gh-tts", "gh_tts_url", os.environ.get("GITHUB_PUBLIC_HOST", "github.com")),
-        ("GitHub Helix", "github_helix", "gh-helix", "gh_helix_url", os.environ.get("HELIX_GH_HOST", "github.helix.gsa.gov")),
-        ("GitLab", "gitlab", "gl-cg", "gl_cg_url", cfg.get("gitlab", {}).get("host") or os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov")),
-    ]
-    boards: list[IssueBoard] = []
-    any_fail = False
+    roster = UserRoster.load(config.parent / "users.toml") if any("@" in value and value != "@me" for value in users) else UserRoster({})
+    query = IssueQuery(relationships, users, state, labels, search, limit)
+    boards, errors = collect_boards(cfg, roster, query, selected_targets)
+    for error in errors:
+        typer.echo(error, err=True)
 
-    for name, slug, target, url_key, host in targets:
-        repo = os.environ.get(_TARGET_RESOURCE_ENV[target])
-        if not repo:
-            boards.append(IssueBoard(name, slug, board_urls.get(url_key, f"https://{host}/#TICKET#"), (), f"missing {_TARGET_RESOURCE_ENV[target]}"))
-            typer.echo(f"FAILED on {target}: set {_TARGET_RESOURCE_ENV[target]}", err=True)
-            any_fail = True
-            continue
-        adapter = GitLabAdapter(host, repo) if target == "gl-cg" else GitHubAdapter(host, repo)
-        derived_ticket_url = (
-            f"https://{host}/{repo}/-/issues/#TICKET#"
-            if target == "gl-cg"
-            else f"https://{host}/{repo}/issues/#TICKET#"
-        )
-        ticket_url = board_urls.get(url_key, derived_ticket_url)
-        try:
-            issues = adapter.list_open_authored_or_assigned(limit)
-            boards.append(IssueBoard(name, slug, ticket_url, _with_ticket_url(issues, ticket_url)))
-        except AdapterError as exc:
-            boards.append(IssueBoard(name, slug, ticket_url, (), str(exc)))
-            typer.echo(f"FAILED on {target}: {exc}", err=True)
-            any_fail = True
-
-    jira_project = os.environ.get("JIRA_MOD_PROJECT") or cfg["jira"]["project_key"]
-    if not jira_url:
-        boards.append(IssueBoard("Jira", "jira", "", (), "missing Jira base URL"))
-        typer.echo("FAILED on jira-mod: set [jira].base_url or JIRA_INSTANCE_URL", err=True)
-        any_fail = True
-    else:
-        jira = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), jira_project)
-        ticket_url = board_urls.get("jira_mod_url", f"{jira_url.rstrip('/')}/browse/#TICKET#")
-        try:
-            issues = jira.list_open_authored_or_assigned(jira_url, limit)
-            boards.append(IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url)))
-        except AdapterError as exc:
-            boards.append(IssueBoard("Jira", "jira", ticket_url, (), str(exc)))
-            typer.echo(f"FAILED on jira-mod: {exc}", err=True)
-            any_fail = True
-
-    markdown = render_boards(boards, body_limit)
-    if output:
+    filters = {
+        "Relationships": ", ".join(relationships),
+        "Users": ", ".join(users),
+        "State": state,
+        "Labels": ", ".join(labels) or "any",
+        "Search": search or "none",
+        "Targets": ", ".join(selected_targets),
+    }
+    markdown = render_boards(boards, body_limit, filters)
+    try:
         output.write_text(markdown, encoding="utf-8")
-        typer.echo(f"wrote {output}")
-    else:
-        typer.echo(markdown, nl=False)
-    if any_fail:
+    except OSError as exc:
+        typer.echo(f"FAILED writing {output}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"wrote {output}")
+    if errors:
         raise typer.Exit(code=1)
-
-
-def _with_ticket_url(issues: list[OpenIssue], ticket_url: str) -> tuple[OpenIssue, ...]:
-    """Apply the selected board URL to both Mermaid cards and detail links."""
-    return tuple(
-        OpenIssue(
-            provider=issue.provider,
-            issue_id=issue.issue_id,
-            title=issue.title,
-            body=issue.body,
-            labels=issue.labels,
-            url=ticket_url.replace("#TICKET#", issue.issue_id),
-        )
-        for issue in issues
-    )
 
 
 @app.command()

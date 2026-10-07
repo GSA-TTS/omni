@@ -3,10 +3,10 @@ workshop.cloud.gov via the GITLAB_HOST env var.
 """
 from __future__ import annotations
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
-from harness.models import CanonicalIssue, OpenIssue
+from harness.models import CanonicalIssue, IssueQuery, OpenIssue
 
 
 class GitLabAdapter(BaseIssueAdapter):
@@ -35,22 +35,33 @@ class GitLabAdapter(BaseIssueAdapter):
             assignees=[a["username"] for a in data.get("assignees", [])],
         )
 
-    def list_open_authored_or_assigned(self, limit: int = 100) -> list[OpenIssue]:
-        """List open issues authored by or assigned to the authenticated user."""
+    def list_issues(self, query: IssueQuery) -> list[OpenIssue]:
+        """List issues matching normalized relationship and content filters."""
         project = quote(self.repo, safe="")
         found: dict[int, dict] = {}
-        for scope in ("created_by_me", "assigned_to_me"):
-            data = self._run_cli(
-                [
-                    "glab", "api",
-                    f"projects/{project}/issues?state=opened&scope={scope}&per_page={limit}",
-                ],
-                env_overrides=self._env(),
-            )
-            if not isinstance(data, list):
-                raise AdapterError(f"Unexpected GitLab issue list output for {self.repo}")
-            for item in data:
-                found[int(item["iid"])] = item
+        for relationship in query.relationships:
+            for user in query.users:
+                params: dict[str, str | int] = {
+                    "state": "opened" if query.state == "open" else query.state,
+                    "scope": "all",
+                    "per_page": query.limit,
+                }
+                if user == "@me":
+                    params["scope"] = "created_by_me" if relationship == "authored" else "assigned_to_me"
+                else:
+                    params["author_username" if relationship == "authored" else "assignee_username"] = user
+                if query.labels:
+                    params["labels"] = ",".join(query.labels)
+                if query.search:
+                    params["search"] = query.search
+                data = self._run_cli(
+                    ["glab", "api", f"projects/{project}/issues?{urlencode(params)}"],
+                    env_overrides=self._env(),
+                )
+                if not isinstance(data, list):
+                    raise AdapterError(f"Unexpected GitLab issue list output for {self.repo}")
+                for item in data:
+                    found[int(item["iid"])] = item
         return [
             OpenIssue(
                 provider=self.host,

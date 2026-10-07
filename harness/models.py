@@ -66,6 +66,18 @@ class OpenIssue:
     url: str
 
 
+@dataclass(frozen=True)
+class IssueQuery:
+    """Provider-neutral filters for read-only issue reports."""
+
+    relationships: tuple[str, ...] = ("authored", "assigned")
+    users: tuple[str, ...] = ("@me",)
+    state: str = "open"
+    labels: tuple[str, ...] = ()
+    search: str | None = None
+    limit: int = 100
+
+
 @dataclass
 class FieldDelta:
     """A single detected difference between two canonical issues."""
