@@ -4,9 +4,54 @@ Unified CLI and synchronization harness across multi-tenant, FedRAMP-accredited
 Git and issue-tracking environments: GitHub.com, GitHub Enterprise Server
 (Helix), GitLab on cloud.gov, and Jira FedRAMP Moderate.
 
-Provider CLIs (`gh`, `glab`, `jira-cli`) are treated as interchangeable
+Provider CLIs (`gh`, `glab`, `acli`) are treated as interchangeable
 transport adapters driven by a canonical issue model, avoiding an M x N
 conversion matrix between provider formats.
+
+## Primary Use Case: Give Agents Current Issue Context
+
+The primary workflow is generating one reviewable Markdown artifact that gives
+an agent or human current work context across GitHub.com, GitHub Helix, GitLab,
+and Jira:
+
+```sh
+mise exec -- uv run omni-sync board --output open-issues.md --body-limit 240
+```
+
+Then provide `open-issues.md` to the agent as task context. The file contains:
+
+- The generation timestamp and exact filters used.
+- Total issue and provider counts.
+- One directly linked Mermaid Kanban board per selected provider.
+- A review table with issue title, body excerpt, labels, identifier, and URL.
+- Embedded provider failures, so partial context is visible rather than silent.
+
+The report is written even when one provider fails. Exit code `0` means every
+selected provider succeeded; exit code `1` means the file contains partial
+results and explicit provider errors that must be reviewed.
+
+Common agent-context views:
+
+```sh
+# Everything authored by or assigned to the authenticated user (default)
+mise exec -- uv run omni-sync board
+
+# Current assignments only
+mise exec -- uv run omni-sync board --relationship assigned
+
+# Work for a roster user across providers
+mise exec -- uv run omni-sync board --user person@agency.gov
+
+# Focused security context from selected systems
+mise exec -- uv run omni-sync board \
+  --target gh-tts --target jira-mod \
+  --label security --search "token rotation"
+```
+
+`open-issues.md` is gitignored because it can contain provider data. Do not
+commit it, paste it into public systems, or treat a partial report as complete.
+Configure missing provider resources or narrow the report with repeatable
+`--target` flags.
 
 ## Prerequisites
 
@@ -16,7 +61,7 @@ Managed via [mise](https://mise.jdx.dev/):
 mise install
 ```
 
-This provisions `gh`, `glab`, `jira-cli` (via aqua), and the Python/`uv`
+This provisions `gh`, `glab`, `acli`, and the Python/`uv`
 toolchain, and sets default host env vars (`HELIX_GH_HOST`,
 `CLOUDGOV_GLAB_HOST`, `JIRA_INSTANCE_URL`, `GITHUB_PUBLIC_HOST`).
 
@@ -140,7 +185,7 @@ export GL_CG_REPO=group/project
 export JIRA_MOD_PROJECT=PROJ
 ```
 
-Each underlying CLI (`gh`, `glab`, `jira-cli`) must already be authenticated
+Each underlying CLI (`gh`, `glab`, `acli`) must already be authenticated
 against its respective host.
 
 ## Local config files (PII — gitignored)
