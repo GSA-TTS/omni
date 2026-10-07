@@ -22,6 +22,7 @@ from harness.engine.gh_jira_sync import (
     sync_jira_from_github,
 )
 from harness.engine.mirror import GitMirror
+from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
 from harness.models import CanonicalIssue
 
@@ -402,6 +403,47 @@ def doctor(
         typer.echo("All checks passed.")
     else:
         typer.echo("Some checks failed — see above.")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def preflight(
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+) -> None:
+    """Check that each configured target exists and is writable (read-only).
+
+    Verifies repo/project visibility, issues enabled, and write access per
+    target so a create/sync fails fast with a clear message instead of a raw
+    CLI error mid-run. Targets resolve from env vars (as `omni-sync create`).
+    """
+    _load_dotenv()
+    cfg = load_config(config)
+    results = []
+
+    helix = os.environ.get("GH_HELIX_REPO")
+    if helix:
+        results.append(check_github(os.environ.get("HELIX_GH_HOST", "github.helix.gsa.gov"), helix))
+    tts = os.environ.get("GH_TTS_REPO")
+    if tts:
+        results.append(check_github(os.environ.get("GITHUB_PUBLIC_HOST", "github.com"), tts))
+    glcg = os.environ.get("GL_CG_REPO")
+    if glcg:
+        results.append(check_gitlab(os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov"), glcg))
+    jira_project = os.environ.get("JIRA_MOD_PROJECT") or cfg.get("jira", {}).get("project_key")
+    if jira_project:
+        results.append(check_jira(cfg.get("jira", {}).get("acli_bin", "acli"), jira_project))
+
+    if not results:
+        typer.echo("No targets configured (set GH_HELIX_REPO / GH_TTS_REPO / GL_CG_REPO / JIRA_MOD_PROJECT)", err=True)
+        raise typer.Exit(code=1)
+
+    any_fail = False
+    for r in results:
+        mark = "OK  " if r.ok else "FAIL"
+        any_fail = any_fail or not r.ok
+        typer.echo(f"[{mark}] {r.target} {r.resource}: {r.detail}")
+
+    if any_fail:
         raise typer.Exit(code=1)
 
 
