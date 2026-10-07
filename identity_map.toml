@@ -1,0 +1,21 @@
+# Identity map: canonical person (email) -> per-host username.
+#
+# Pivot field is the email address, so the same person is resolvable across
+# every provider host regardless of their differing usernames. Consumed by
+# the harness to translate assignees between GitHub.com, GitHub Enterprise
+# Server (Helix), and GitLab (cloud.gov).
+#
+# Table = host base URL (quoted; TOML bare keys cannot contain / or :).
+# Each row =  "<email>" = "<username on that host>"
+
+["https://github.helix.gsa.gov/"]
+# Store the GitHub LOGIN (what --assignee / `gh api user` use), not the SSO
+# handle. On Helix you sign in via SSO as "ghes-login-1" (the SAML
+# external UID) but your login is "johnhjediny". See README Authentication.
+"person.one@agency.gov" = "johnhjediny"
+
+["https://github.com/GSA-TTS"]
+"person.one@agency.gov" = "jjediny"
+
+["https://workshop.cloud.gov/"]
+"person.one@agency.gov" = "john.jediny"

@@ -68,6 +68,7 @@ class BaseIssueAdapter(ABC):
         base: str,
         head: str,
         draft: bool = False,
+        assignees: list[str] | None = None,
     ) -> str:
         """Open a PR/MR. Override in adapters that support it. Returns its URL."""
         raise AdapterError(f"{type(self).__name__} does not support pull requests")

@@ -59,6 +59,19 @@ source's labels are added to the target (`gh issue edit --add-label` /
 labels the target already has, so human-added labels on the target are
 preserved. Label *order* never counts as a difference (sorted before compare).
 
+## Assignees via identity map
+
+`--assignee` on `create` and `pr` accepts an email (the pivot field) or a
+username. Emails resolve per host through `identity_map.toml`:
+`--assignee person.one@agency.gov --to gh-helix` → `johnhjediny`,
+`--to gl-cg` → `john.jediny`. A plain username passes through; an unmapped
+email is skipped with a warning (never fails the command).
+
+**Helix gotcha:** the SSO login handle is the `_gsagov`-suffixed SAML UID
+(`ghes-login-1`), but the GitHub login used for `--assignee` is the
+un-suffixed `johnhjediny`. The identity map stores the login; the `_gsagov`
+form is only for the SSO sign-in prompt.
+
 ## Auth is transport-agnostic
 
 Commands behave identically whether `gh`/`glab` were authenticated via web

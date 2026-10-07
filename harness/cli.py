@@ -24,9 +24,33 @@ from harness.engine.gh_jira_sync import (
 from harness.engine.mirror import GitMirror
 from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
+from harness.identity import IdentityMap
 from harness.models import CanonicalIssue
 
 app = typer.Typer(help="Unified issue CLI across GitHub, GitHub Enterprise, GitLab, and Jira.")
+
+_IDENTITY_MAP = Path(__file__).resolve().parent.parent / "identity_map.toml"
+
+
+def _resolve_assignees(target: str, values: list[str]) -> list[str]:
+    """Translate assignee emails to the target host's usernames via identity_map.toml.
+
+    A value that is already a username passes through. An email with a mapping
+    becomes that host's username; an email with no mapping is dropped with a
+    warning so a create/PR doesn't fail on an unknown person.
+    """
+    if not values:
+        return []
+    identity = IdentityMap.load(_IDENTITY_MAP)
+    resolved: list[str] = []
+    for value in values:
+        username = identity.resolve_assignee(target, value)
+        if username is None:
+            typer.echo(f"  (skipping assignee '{value}': no mapping for {target} in identity_map.toml)", err=True)
+            continue
+        resolved.append(username)
+    return resolved
+
 
 
 def _load_dotenv(path: Path | None = None) -> None:
@@ -103,19 +127,20 @@ def create(
     title: str,
     body: str,
     to: list[str] = typer.Option(..., "--to", help="Target systems: gh-tts, gh-helix, gl-cg, jira-mod"),
+    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via identity_map.toml) or username; repeatable"),
 ) -> None:
     """Create the same issue across one or more target systems."""
-    canonical = CanonicalIssue.create_new(title=title, body_markdown=body)
     results: dict[str, str] = {}
 
     for target in to:
         adapter = _resolve_adapter(target)
+        canonical = CanonicalIssue.create_new(title=title, body_markdown=body)
+        canonical.assignees = _resolve_assignees(target, assignee or [])
         try:
             remote_id = adapter.create_issue(canonical)
         except AdapterError as exc:
             typer.echo(f"FAILED on {target}: {exc}", err=True)
             continue
-        canonical.sync_metadata[target] = remote_id
         results[target] = remote_id
         typer.echo(f"Created on {target}: {remote_id}")
 
@@ -414,13 +439,17 @@ def pr(
     body: str = typer.Option("", "--body", help="PR/MR description"),
     to: list[str] = typer.Option(..., "--to", help="Targets: gh-tts, gh-helix, gl-cg"),
     draft: bool = typer.Option(False, "--draft", help="Open as a draft"),
+    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via identity_map.toml) or username; repeatable"),
 ) -> None:
     """Open the same pull/merge request across one or more GitHub/GitLab targets."""
     results: dict[str, str] = {}
     for target in to:
         adapter = _resolve_adapter(target)
+        assignees = _resolve_assignees(target, assignee or [])
         try:
-            url = adapter.create_pull_request(title, body, base=base, head=head, draft=draft)
+            url = adapter.create_pull_request(
+                title, body, base=base, head=head, draft=draft, assignees=assignees
+            )
         except AdapterError as exc:
             typer.echo(f"FAILED on {target}: {exc}", err=True)
             continue

@@ -91,7 +91,8 @@ class GitHubAdapter(BaseIssueAdapter):
         )
 
     def create_pull_request(
-        self, title: str, body: str, base: str, head: str, draft: bool = False
+        self, title: str, body: str, base: str, head: str, draft: bool = False,
+        assignees: list[str] | None = None,
     ) -> str:
         argv = [
             "gh", "pr", "create",
@@ -103,5 +104,7 @@ class GitHubAdapter(BaseIssueAdapter):
         ]
         if draft:
             argv.append("--draft")
+        for login in assignees or []:
+            argv += ["--assignee", login]
         url = self._run_cli(argv, env_overrides=self._env(), parse_json=False)
         return str(url).strip()

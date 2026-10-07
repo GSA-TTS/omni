@@ -76,6 +76,16 @@ gh auth login
 gh auth login --hostname github.helix.gsa.gov
 ```
 
+> **Helix SSO login vs. username.** On `github.helix.gsa.gov` you sign in
+> through SSO using the `_gsagov`-suffixed form of your handle (e.g.
+> `ghes-login-1`) to reach the correct SSO endpoint. That suffixed value
+> is the SAML external UID, **not** your GitHub login. Your actual GitHub login
+> on Helix (what `gh api user --jq .login` returns, and what `--assignee`
+> expects) is the un-suffixed form (`johnhjediny`). The identity map
+> ([identity_map.toml](identity_map.toml)) therefore stores the **login**, not
+> the SSO form, since assignments resolve against the login — use the `_gsagov`
+> value only at the SSO login prompt.
+
 …or, if you already have SSH keys configured, authenticate the API with a token
 while keeping SSH for Git operations:
 
@@ -133,6 +143,32 @@ export JIRA_MOD_PROJECT=PROJ
 
 Each underlying CLI (`gh`, `glab`, `jira-cli`) must already be authenticated
 against its respective host.
+
+## Identity map (cross-host assignees)
+
+`--assignee` on `create` and `pr` accepts either a provider username or an
+**email address**. Emails are the pivot field: the same person resolves to the
+right username on each host via [identity_map.toml](identity_map.toml), one
+table per host base URL:
+
+```toml
+["https://github.com/GSA-TTS"]
+"person.one@agency.gov" = "jjediny"
+
+["https://github.helix.gsa.gov/"]
+"person.one@agency.gov" = "johnhjediny"   # the GitHub login, NOT the _gsagov SSO form
+
+["https://workshop.cloud.gov/"]
+"person.one@agency.gov" = "john.jediny"
+```
+
+So `--assignee person.one@agency.gov --to gh-helix` assigns `johnhjediny`, while
+the same flag `--to gl-cg` assigns `john.jediny`. A plain username passes
+through unchanged; an email with no mapping for that host is skipped with a
+warning rather than failing the whole command.
+
+> Note the Helix value is the login (`johnhjediny`), not the `_gsagov` SSO
+> handle — see the Helix SSO note under Authentication.
 
 ## Usage
 
