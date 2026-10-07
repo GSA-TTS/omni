@@ -17,9 +17,10 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from harness.resources import resource_text
+
 _LABEL_UNSAFE_RE = re.compile(r"\s+")
 
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "omni-project.schema.json"
 _SUPPORTED_SCHEMA_VERSION = 1
 
 
@@ -68,7 +69,7 @@ def validate_config(cfg: dict, source: Path | None = None) -> None:
         _minimal_validate(cfg, source)
         return
 
-    schema = json.loads(_SCHEMA_PATH.read_text())
+    schema = json.loads(resource_text("schema/omni-project.schema.json"))
     try:
         jsonschema.validate(cfg, schema)
     except jsonschema.ValidationError as exc:  # pragma: no cover - exercised when installed

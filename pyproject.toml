@@ -10,6 +10,7 @@ dependencies = [
     "typer>=0.12",
     "pydantic>=2.7",
     "rich>=13.7",
+    "jsonschema==4.26.0",
 ]
 
 [project.scripts]
@@ -22,10 +23,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["harness"]
 
+[tool.hatch.build.targets.wheel.force-include]
+".env.example" = "harness/resources/.env.example"
+"users.toml.example" = "harness/resources/users.toml.example"
+"schema/omni-project.schema.json" = "harness/resources/schema/omni-project.schema.json"
+"schema/users.schema.json" = "harness/resources/schema/users.schema.json"
+
 [dependency-groups]
 dev = [
     "pytest>=8.2",
     "pytest-mock>=3.14",
     "hypothesis>=6.100",
-    "jsonschema>=4.21",
 ]

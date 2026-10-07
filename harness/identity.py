@@ -14,6 +14,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+from harness.resources import resource_text
+
 # Logical target name -> the per-user field holding that host's username.
 TARGET_FIELD = {
     "gh-tts": "gh",
@@ -23,7 +25,6 @@ TARGET_FIELD = {
 
 # Default location of the single roster file.
 USERS_TOML = Path(__file__).resolve().parent.parent / "users.toml"
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "users.schema.json"
 
 
 class UserRoster:
@@ -107,7 +108,7 @@ def _validate_users(data: dict, source: Path) -> None:
             sys.exit(f"users.toml invalid in {source}: [users] must be a table")
         return
 
-    schema = json.loads(_SCHEMA_PATH.read_text())
+    schema = json.loads(resource_text("schema/users.schema.json"))
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:  # pragma: no cover - exercised when installed

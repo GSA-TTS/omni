@@ -16,10 +16,6 @@ CONFIG_FILES = ("omni-project.toml", "users.toml", ".env")
 # Files whose absence should warn (the ones holding real, local-only data).
 LOCAL_ONLY = ("users.toml", ".env")
 
-# Packaged templates shipped in the repo root, used by `init`.
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
-
-
 def find_workspace(start: Path | None = None) -> Path:
     """Return the directory holding omni-sync config, searching CWD upward.
 
@@ -44,9 +40,6 @@ def missing_local_files(workspace: Path | None = None) -> list[str]:
     return [name for name in LOCAL_ONLY if not (ws / name).exists()]
 
 
-def template_for(name: str) -> Path:
-    """Path to the committed *.example (or base) template for a config file."""
-    if name == ".env":
-        return _PACKAGE_ROOT / ".env.example"
-    example = _PACKAGE_ROOT / f"{name}.example"
-    return example if example.exists() else _PACKAGE_ROOT / name
+def template_name(name: str) -> str:
+    """Packaged resource name for a local config file."""
+    return ".env.example" if name == ".env" else f"{name}.example"
