@@ -46,6 +46,17 @@
         "project_number": {"type": "integer"}
       }
     },
+    "board": {
+      "type": "object",
+      "description": "Optional issue URL templates used by `omni-sync board`; #TICKET# is replaced by the provider issue ID.",
+      "additionalProperties": false,
+      "properties": {
+        "gh_tts_url": {"type": "string", "pattern": "^https://.+#TICKET#.*$"},
+        "gh_helix_url": {"type": "string", "pattern": "^https://.+#TICKET#.*$"},
+        "gl_cg_url": {"type": "string", "pattern": "^https://.+#TICKET#.*$"},
+        "jira_mod_url": {"type": "string", "pattern": "^https://.+#TICKET#.*$"}
+      }
+    },
     "mirror": {
       "type": "object",
       "description": "name -> git remote URL for `omni-sync mirror`.",

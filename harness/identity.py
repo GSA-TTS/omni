@@ -77,6 +77,14 @@ class UserRoster:
             return self.username_for_target(target, value)
         return value
 
+    def resolve_issue_user(self, target: str, value: str) -> str | None:
+        """Resolve a board filter identity for one provider target."""
+        if value == "@me":
+            return value
+        if target == "jira-mod":
+            return value
+        return self.resolve_assignee(target, value)
+
     def github_login_to_jira_email(self) -> dict[str, str]:
         """Map every known GitHub login (github.com or Helix) -> Jira email.
 

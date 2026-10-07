@@ -25,6 +25,11 @@ repos = [
 ]
 project_number = 101
 
+# Optional URL templates for `omni-sync board`. Each uses #TICKET# for the issue
+# ID. Omitted values are derived from the corresponding host and repo/project.
+[board]
+gh_tts_url = "https://github.com/GSA-TTS/omni/issues/#TICKET#"
+
 # Git mirror remotes for `omni-sync mirror`. name -> git remote URL.
 # Either transport works and does not affect the command: HTTPS reuses the
 # `gh` credential helper, SSH uses your agent/keychain.

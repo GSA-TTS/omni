@@ -50,6 +50,15 @@ def test_resolve_assignee_unmapped_email_is_none():
     assert _ROSTER.resolve_assignee("gh-tts", "nobody@agency.gov") is None
 
 
+def test_resolve_issue_user_keeps_current_identity_and_jira_email():
+    assert _ROSTER.resolve_issue_user("gh-tts", "@me") == "@me"
+    assert _ROSTER.resolve_issue_user("jira-mod", "dev.user@agency.gov") == "dev.user@agency.gov"
+
+
+def test_resolve_issue_user_maps_email_for_host():
+    assert _ROSTER.resolve_issue_user("gh-helix", "dev.user@agency.gov") == "ghes-login"
+
+
 def test_github_login_to_jira_email_covers_both_hosts():
     mapping = _ROSTER.github_login_to_jira_email()
     assert mapping["gh-login"] == "dev.user@agency.gov"

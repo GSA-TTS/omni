@@ -17,7 +17,7 @@ import re
 from datetime import UTC, datetime
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
-from harness.models import CanonicalIssue
+from harness.models import CanonicalIssue, IssueQuery, OpenIssue
 
 SYNC_COMMENT_MARKER = "[github-sync]"
 _VIEW_FIELDS = "summary,status,assignee,labels"
@@ -93,6 +93,46 @@ class AcliJiraAdapter(BaseIssueAdapter):
         if data is None:
             return None
         return ((data.get("fields") or {}).get("assignee") or {}).get("emailAddress")
+
+    def list_issues(self, base_url: str, query: IssueQuery) -> list[OpenIssue]:
+        """List Jira work matching normalized relationship and content filters."""
+        people = []
+        for relationship in query.relationships:
+            field = "reporter" if relationship == "authored" else "assignee"
+            people.extend(
+                f"{field} = currentUser()" if user == "@me" else f'{field} = "{_jql(user)}"'
+                for user in query.users
+            )
+        clauses = [f'project = "{_jql(self.project_key)}"', f"({' OR '.join(people)})"]
+        if query.state == "open":
+            clauses.append("statusCategory != Done")
+        elif query.state == "closed":
+            clauses.append("statusCategory = Done")
+        clauses.extend(f'labels = "{_jql(label)}"' for label in query.labels)
+        if query.search:
+            clauses.append(f'text ~ "{_jql(query.search)}"')
+        jql = " AND ".join(clauses)
+        data = self._run_cli(
+            [
+                self.acli_bin, "jira", "workitem", "search", "--jql", jql,
+                "--fields", "key,summary,description,labels", "--limit", str(query.limit), "--json",
+            ]
+        )
+        items = data.get("issues", []) if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            raise AdapterError(f"Unexpected Jira workitem search output for {self.project_key}")
+        return [
+            OpenIssue(
+                provider="jira-mod",
+                issue_id=str(item.get("key") or ""),
+                title=(item.get("fields") or {}).get("summary") or item.get("summary") or "",
+                body=_adf_text((item.get("fields") or {}).get("description") or item.get("description")),
+                labels=tuple((item.get("fields") or {}).get("labels") or item.get("labels") or []),
+                url=f"{base_url.rstrip('/')}/browse/{item.get('key')}",
+            )
+            for item in items
+            if item.get("key")
+        ]
 
     # ---- writes ------------------------------------------------------------
 
@@ -212,6 +252,24 @@ def find_sync_comment(comments: list[dict]) -> dict | None:
     if len(matches) > 1:
         raise AdapterError("Multiple managed Jira sync comments found; refusing an ambiguous update")
     return matches[0] if matches else None
+
+
+def _adf_text(value: object) -> str:
+    """Flatten Jira ADF to readable text without interpreting its structure."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(filter(None, (_adf_text(item) for item in value)))
+    if isinstance(value, dict):
+        text = value.get("text")
+        if isinstance(text, str):
+            return text
+        return _adf_text(value.get("content", []))
+    return ""
+
+
+def _jql(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def strip_sync_timestamp(body: str) -> str:

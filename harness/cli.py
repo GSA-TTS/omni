@@ -21,11 +21,12 @@ from harness.engine.gh_jira_sync import (
     plan_backfill_github_from_jira,
     sync_jira_from_github,
 )
+from harness.engine.board import collect_boards, render_boards
 from harness.engine.mirror import GitMirror
 from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
 from harness.identity import UserRoster
-from harness.models import CanonicalIssue
+from harness.models import CanonicalIssue, IssueQuery
 from harness.resources import resource_text
 from harness.workspace import (
     LOCAL_ONLY,
@@ -181,6 +182,67 @@ def create(
         typer.echo(f"Created on {target}: {remote_id}")
 
     if any_fail or not results:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def board(
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
+    output: Path = typer.Option(Path("open-issues.md"), "--output", help="Consolidated Markdown report path"),
+    relationship: list[str] = typer.Option(None, "--relationship", help="authored or assigned; repeatable (default: both)"),
+    user: list[str] = typer.Option(None, "--user", help="@me, roster email, or provider username; repeatable"),
+    state: str = typer.Option("open", "--state", help="open, closed, or all"),
+    label: list[str] = typer.Option(None, "--label", help="Require label; repeatable (AND semantics)"),
+    search: str | None = typer.Option(None, "--search", help="Search issue title and body"),
+    target: list[str] = typer.Option(None, "--target", help="Provider target; repeatable (default: all four)"),
+    limit: int = typer.Option(100, "--limit", help="Maximum issues per authored/assigned query"),
+    body_limit: int = typer.Option(180, "--body-limit", help="Maximum body characters per card"),
+) -> None:
+    """Write one agent- and human-readable Markdown issue report."""
+    if limit < 1:
+        raise typer.BadParameter("limit must be at least 1")
+    if limit > 100:
+        raise typer.BadParameter("limit cannot exceed 100")
+    if body_limit < 1:
+        raise typer.BadParameter("body-limit must be at least 1")
+    relationships = tuple(relationship or ("authored", "assigned"))
+    users = tuple(user or ("@me",))
+    labels = tuple(label or ())
+    selected_targets = tuple(target or ("gh-tts", "gh-helix", "gl-cg", "jira-mod"))
+    invalid_relationships = sorted(set(relationships) - {"authored", "assigned"})
+    invalid_targets = sorted(set(selected_targets) - set(_TARGET_RESOURCE_ENV))
+    if invalid_relationships:
+        raise typer.BadParameter(f"invalid relationship: {', '.join(invalid_relationships)}")
+    if state not in {"open", "closed", "all"}:
+        raise typer.BadParameter("state must be open, closed, or all")
+    if invalid_targets:
+        raise typer.BadParameter(f"invalid target: {', '.join(invalid_targets)}")
+
+    config = _runtime_config(config)
+    _load_dotenv(config.parent / ".env")
+    cfg = load_config(config)
+    roster = UserRoster.load(config.parent / "users.toml") if any("@" in value and value != "@me" for value in users) else UserRoster({})
+    query = IssueQuery(relationships, users, state, labels, search, limit)
+    boards, errors = collect_boards(cfg, roster, query, selected_targets)
+    for error in errors:
+        typer.echo(error, err=True)
+
+    filters = {
+        "Relationships": ", ".join(relationships),
+        "Users": ", ".join(users),
+        "State": state,
+        "Labels": ", ".join(labels) or "any",
+        "Search": search or "none",
+        "Targets": ", ".join(selected_targets),
+    }
+    markdown = render_boards(boards, body_limit, filters)
+    try:
+        output.write_text(markdown, encoding="utf-8")
+    except OSError as exc:
+        typer.echo(f"FAILED writing {output}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"wrote {output}")
+    if errors:
         raise typer.Exit(code=1)
 
 

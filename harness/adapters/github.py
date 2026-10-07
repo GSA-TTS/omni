@@ -4,7 +4,7 @@ Enterprise Server (e.g. github.helix.gsa.gov) via the GH_HOST env var.
 from __future__ import annotations
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
-from harness.models import CanonicalIssue
+from harness.models import CanonicalIssue, IssueQuery, OpenIssue
 
 _ISSUE_FIELDS = "title,body,state,labels,assignees,number"
 
@@ -33,6 +33,38 @@ class GitHubAdapter(BaseIssueAdapter):
             labels=[label["name"] for label in data.get("labels", [])],
             assignees=[a["login"] for a in data.get("assignees", [])],
         )
+
+    def list_issues(self, query: IssueQuery) -> list[OpenIssue]:
+        """List issues matching normalized relationship and content filters."""
+        found: dict[int, dict] = {}
+        role_flags = {"authored": "--author", "assigned": "--assignee"}
+        for relationship in query.relationships:
+            for user in query.users:
+                argv = [
+                    "gh", "issue", "list", "-R", f"{self.host}/{self.repo}",
+                    "--state", query.state, role_flags[relationship], user,
+                    "--limit", str(query.limit), "--json", "number,title,body,labels,url",
+                ]
+                for label in query.labels:
+                    argv += ["--label", label]
+                if query.search:
+                    argv += ["--search", query.search]
+                data = self._run_cli(argv, env_overrides=self._env())
+                if not isinstance(data, list):
+                    raise AdapterError(f"Unexpected gh issue list output for {self.repo}")
+                for item in data:
+                    found[int(item["number"])] = item
+        return [
+            OpenIssue(
+                provider=self.host,
+                issue_id=str(number),
+                title=item.get("title") or "",
+                body=item.get("body") or "",
+                labels=tuple(label["name"] for label in item.get("labels", [])),
+                url=item.get("url") or f"https://{self.host}/{self.repo}/issues/{number}",
+            )
+            for number, item in sorted(found.items())
+        ]
 
     def create_issue(self, issue: CanonicalIssue) -> str:
         argv = [

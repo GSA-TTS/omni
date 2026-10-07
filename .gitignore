@@ -13,4 +13,7 @@ token.txt
 # Local-only PII roster (keep real emails/usernames out of the repo)
 users.toml
 
+# Generated issue context can contain provider data.
+open-issues.md
+
 .vscode/

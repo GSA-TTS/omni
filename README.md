@@ -211,6 +211,38 @@ Batch commands continue processing independent targets or tickets after an
 item fails, but return exit code `1` if any item failed. An exit code of `0`
 therefore means the entire requested batch succeeded.
 
+Write one consolidated Markdown context file containing issues from GitHub.com,
+GitHub Helix, GitLab, and Jira:
+
+```sh
+uv run omni-sync board
+uv run omni-sync board --output open-issues.md --body-limit 240
+uv run omni-sync board --relationship assigned --user person@agency.gov
+uv run omni-sync board --target gh-tts --target jira-mod --label security --search "token rotation"
+uv run omni-sync board --state closed --limit 25
+```
+
+`board` always writes a single Markdown file (`open-issues.md` by default) for
+agent context and human review. It records generation time, filters, totals,
+provider failures, four provider-specific Mermaid boards, and linked detail
+tables. It does not print the report body to stdout.
+
+Filters use the shared cross-provider subset: `--relationship authored|assigned`,
+`--user @me|email|username`, `--state open|closed|all`, repeatable `--label`,
+`--search`, repeatable `--target`, `--limit`, and `--body-limit`. Email users
+resolve through the sibling `users.toml` for GitHub/GitLab and remain email
+identities for Jira. Unmapped email identities fail closed for that provider.
+
+The report contains one Mermaid Kanban board per selected provider so each can use
+its own configured issue URL template. Set optional `[board]` values `gh_tts_url`,
+`gh_helix_url`, `gl_cg_url`, and `jira_mod_url`; omitted values are derived from
+the configured host and resource. Templates use `#TICKET#` for the issue ID.
+Direct links are also included in the details table below each board.
+Repository/project values and host overrides come from
+the selected project context (`omni-project.toml` plus its sibling `.env`).
+Independent provider failures are rendered in the report and produce exit code
+`1` after the remaining providers have been queried.
+
 Diff an issue between two systems:
 
 ```sh
@@ -266,7 +298,7 @@ Key safety invariants carried over from the source tooling:
 
 ```
 harness/
-├── cli.py                     # Entry point: create, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
+├── cli.py                     # Entry point: create, board, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
 ├── config.py                  # omni-project.toml loader + schema validation + label/assignee mapping
 ├── workspace.py               # Discover omni-project.toml upward from CWD
 ├── identity.py                # users.toml roster (email-pivoted cross-host lookups)
