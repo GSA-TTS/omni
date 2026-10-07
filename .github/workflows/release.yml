@@ -83,7 +83,7 @@ jobs:
           PYAPP_PROJECT_NAME: omni-sync
           PYAPP_PROJECT_VERSION: ${{ env.VERSION }}
           PYAPP_EXEC_SPEC: "harness.cli:app"
-          PYAPP_PYTHON_VERSION: "3.12"
+          PYAPP_PYTHON_VERSION: "3.13"
           PYAPP_UV_ENABLED: "1"
         run: |
           # Point PyApp at the locally built wheel, then compile the launcher.
@@ -95,8 +95,7 @@ jobs:
           mv "$bin" "$out"
           echo "ARTIFACT=$out" >> "$GITHUB_ENV"
 
-      - name: Smoke-test the binary (non-Windows)
-        if: matrix.os != 'windows-latest'
+      - name: Smoke-test the binary
         shell: bash
         run: ./"$ARTIFACT" --help
 

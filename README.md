@@ -75,6 +75,16 @@ Install the harness and dev dependencies:
 uv sync
 ```
 
+Python 3.13 is the development and release runtime. Run all local quality gates
+with one command:
+
+```sh
+make check
+```
+
+This runs Ruff lint/format checks, mypy, the test suite with a 75% coverage
+floor, and pip-audit against the locked environment.
+
 ## Authentication
 
 Copy the example env file and fill in the Jira API token (the only secret this
@@ -418,8 +428,9 @@ against GitHub, GitLab, or Jira in the standard test suite.
 
 ## Releases
 
-CI builds a standalone [PyApp](https://ofek.dev/pyapp/) binary (Linux, macOS
-arm64, Windows) for omni-sync via `uv`:
+CI builds a self-bootstrapping [PyApp](https://ofek.dev/pyapp/) binary using
+Python 3.13 for Linux, macOS arm64, and Windows via `uv`. Every platform binary
+must pass an `--help` smoke test before release:
 
 - **Every merge to `main`** publishes an auto patch release `1.0.<run-number>`.
 - **Pushing a `v1.1.0`-style tag** cuts that exact version (minor/major bump).
