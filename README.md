@@ -84,6 +84,11 @@ gh auth login --git-protocol ssh --hostname github.com
 gh auth status
 ```
 
+> omni-sync is transport-agnostic: issue/sync commands call the authenticated
+> `gh`/`glab` CLIs regardless of whether you logged in via a web session or a
+> token, and `mirror` works with HTTPS (credential helper) or SSH remotes
+> interchangeably. You do not need to standardize on one.
+
 ### GitLab (`glab`) — login options
 
 `glab` on a self-managed/cloud.gov instance supports OAuth (web or device) and
@@ -232,6 +237,18 @@ auto-loads `.env`, so `GITLAB_TOKEN` / `JIRA_API_TOKEN` set there are picked up:
 
 ```sh
 uv run omni-sync doctor
+```
+
+## Secret scanning
+
+A [betterleaks](https://github.com/betterleaks/betterleaks) config
+([betterleaks.toml](betterleaks.toml)) scans the repo for API keys and tokens.
+It keeps the full default rule set and allowlists only the gitignored local
+secret files (`.env`, `.env.*`, SSH config backups); `.env.example` is still
+scanned since it holds placeholders only.
+
+```sh
+betterleaks dir . --config betterleaks.toml
 ```
 
 ## Testing

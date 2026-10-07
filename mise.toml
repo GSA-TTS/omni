@@ -4,6 +4,7 @@ uv = "latest"
 gh = "latest"
 glab = "latest"
 acli = "latest"
+betterleaks = "latest"
 
 [env]
 CLOUDGOV_GLAB_HOST = "workshop.cloud.gov"

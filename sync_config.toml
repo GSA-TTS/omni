@@ -22,6 +22,13 @@ repos = [
 ]
 project_number = 101
 
+# Git mirror remotes for `omni-sync mirror`. name -> git remote URL.
+# Either transport works and does not affect the command: use HTTPS to reuse
+# the `gh` web-session credential helper, or SSH to use your agent/keychain.
+[mirror]
+origin = "git@github.com:GSA-TTS/omni.git"
+helix = "git@github.helix.gsa.gov:example-owner/omni.git"
+
 [sync]
 sync_labels     = true
 sync_assignee   = true

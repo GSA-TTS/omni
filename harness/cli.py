@@ -21,6 +21,7 @@ from harness.engine.gh_jira_sync import (
     plan_backfill_github_from_jira,
     sync_jira_from_github,
 )
+from harness.engine.mirror import GitMirror
 from harness.engine.reconciler import reconcile
 from harness.models import CanonicalIssue
 
@@ -368,6 +369,10 @@ def doctor(
         rc, out = run_quiet(["acli", "jira", "auth", "status"])
         check("acli authenticated", rc == 0 and "Authenticated" in out)
 
+    # --- betterleaks (secret scanning) ---
+    bl_ok = cli_present("betterleaks")
+    check("betterleaks installed", bl_ok, "" if bl_ok else "secret scanning unavailable; see mise.toml")
+
     # --- config parses ---
     try:
         cfg = load_config(config)
@@ -386,6 +391,42 @@ def doctor(
         typer.echo("All checks passed.")
     else:
         typer.echo("Some checks failed — see above.")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def mirror(
+    ref: str = typer.Option("main", "--ref", help="Git ref/branch to push"),
+    to: list[str] = typer.Option(None, "--to", help="Mirror targets from [mirror] config; defaults to all"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply", help="Preview (default) or push"),
+    batch: bool = typer.Option(False, "--batch", help="Non-interactive: fail fast instead of prompting for SSH passphrase"),
+) -> None:
+    """Push the current repo's code to one or more mirror remotes.
+
+    Auth works the same whether a remote is HTTPS (gh web session / credential
+    helper) or SSH (agent/keychain) -- the command does not depend on either.
+    Remotes are read from the [mirror] table of sync_config.toml. One
+    unreachable remote is reported but does not abort the others.
+    """
+    cfg = load_config(config)
+    remotes = cfg.get("mirror", {})
+    if not remotes:
+        typer.echo("No [mirror] remotes configured in sync_config.toml", err=True)
+        raise typer.Exit(code=1)
+
+    targets = to or sorted(remotes)
+    results = GitMirror(remotes, batch=batch).push(ref, targets, dry_run=dry_run)
+
+    any_fail = False
+    for r in results:
+        mark = "OK  " if r.ok else "FAIL"
+        any_fail = any_fail or not r.ok
+        typer.echo(f"[{mark}] {r.remote} ({r.url or '—'}): {r.message}")
+
+    if dry_run:
+        typer.echo("\n(dry run - nothing pushed; use --apply to push)")
+    elif any_fail:
         raise typer.Exit(code=1)
 
 
