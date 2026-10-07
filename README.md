@@ -331,6 +331,22 @@ Apply the reconciliation:
 uv run omni-sync sync gh-helix 4 gl-cg 88 --direction left-to-right --apply
 ```
 
+Mirror a checked-out commit into an empty remote without modifying local Git
+remote configuration:
+
+```sh
+omni-sync mirror --repository ../source \
+  --remote helix=git@github.helix.gsa.gov:org/repo.git \
+  --source-ref HEAD --destination main --to helix --dry-run
+```
+
+`mirror` resolves the source to an exact commit SHA, runs a local object
+integrity check, and displays an explicit `SHA:refs/heads/<destination>`
+refspec. It refuses a source different from checked-out `HEAD` and refuses an
+existing destination branch unless the corresponding override is explicit.
+For a protected or unrelated destination history, select a new review branch
+instead of overriding `main`.
+
 ## Config-driven GitHub ↔ Jira sync (GSA FedRAMP `acli` workflow)
 
 A second, battle-tested sync flow (transposed from the GSA-TTS petrified-forest

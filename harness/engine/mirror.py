@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 
 @dataclass
@@ -52,19 +53,84 @@ class GitMirror:
         except (OSError, subprocess.TimeoutExpired) as exc:
             return 1, str(exc)
 
-    def _ensure_remote(self, name: str, url: str) -> None:
-        """Add the remote if absent, or update its URL if it already exists."""
-        rc, _ = self._run(["git", "remote", "get-url", name])
-        if rc == 0:
-            self._run(["git", "remote", "set-url", name, url])
-        else:
-            self._run(["git", "remote", "add", name, url])
+    def _resolve_commit(self, ref: str) -> tuple[bool, str]:
+        rc, output = self._run(
+            ["git", "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"]
+        )
+        return rc == 0, output.splitlines()[-1] if output else ""
+
+    def _remote_head(self, url: str, destination: str) -> tuple[bool, str]:
+        rc, output = self._run(
+            ["git", "ls-remote", "--heads", "--", url, f"refs/heads/{destination}"]
+        )
+        if rc != 0:
+            return False, output or "remote is unreachable"
+        return True, output.split()[0] if output else ""
+
+    @staticmethod
+    def _safe_url(url: str) -> bool:
+        """Reject credentials embedded in scheme-based remote URLs."""
+        parsed = urlsplit(url)
+        if parsed.scheme in {"http", "https"}:
+            return parsed.username is None and parsed.password is None
+        return parsed.password is None
 
     def push(
-        self, ref: str, targets: list[str], dry_run: bool = False
+        self,
+        source_ref: str,
+        destination: str,
+        targets: list[str],
+        dry_run: bool = False,
+        allow_non_head: bool = False,
+        allow_existing: bool = False,
     ) -> list[MirrorResult]:
-        """Push `ref` to each named target. Unknown targets are reported, not fatal."""
+        """Push one resolved commit to an explicit destination branch."""
         results: list[MirrorResult] = []
+        destination_rc, _ = self._run(
+            ["git", "check-ref-format", "--branch", destination]
+        )
+        if destination_rc != 0:
+            return [
+                MirrorResult(
+                    name,
+                    self.remotes.get(name, ""),
+                    False,
+                    f"invalid destination branch {destination!r}",
+                )
+                for name in targets
+            ]
+        source_ok, source_sha = self._resolve_commit(source_ref)
+        head_ok, head_sha = self._resolve_commit("HEAD")
+        if not source_ok or not head_ok:
+            message = f"cannot resolve source ref {source_ref!r} or HEAD"
+            return [
+                MirrorResult(name, self.remotes.get(name, ""), False, message)
+                for name in targets
+            ]
+        if source_sha != head_sha and not allow_non_head:
+            message = (
+                f"source {source_ref} resolves to {source_sha}, but checked-out HEAD is "
+                f"{head_sha}; use --allow-non-head only after verifying provenance"
+            )
+            return [
+                MirrorResult(name, self.remotes.get(name, ""), False, message)
+                for name in targets
+            ]
+
+        rc, integrity = self._run(
+            ["git", "fsck", "--connectivity-only", "--no-dangling"]
+        )
+        if rc != 0:
+            return [
+                MirrorResult(
+                    name,
+                    self.remotes.get(name, ""),
+                    False,
+                    f"source object-integrity check failed: {integrity}",
+                )
+                for name in targets
+            ]
+
         for name in targets:
             url = self.remotes.get(name)
             if not url:
@@ -74,15 +140,57 @@ class GitMirror:
                     )
                 )
                 continue
-
-            if dry_run:
+            if not self._safe_url(url):
                 results.append(
-                    MirrorResult(name, url, True, f"dry-run: git push {name} {ref}")
+                    MirrorResult(
+                        name,
+                        "",
+                        False,
+                        "remote URL must not contain embedded credentials",
+                    )
                 )
                 continue
 
-            self._ensure_remote(name, url)
-            rc, out = self._run(["git", "push", name, ref])
+            remote_ok, remote_sha = self._remote_head(url, destination)
+            if not remote_ok:
+                results.append(MirrorResult(name, url, False, remote_sha))
+                continue
+            if remote_sha == source_sha:
+                results.append(
+                    MirrorResult(
+                        name,
+                        url,
+                        True,
+                        f"already synchronized at {source_sha} on {destination}",
+                    )
+                )
+                continue
+            if remote_sha and not allow_existing:
+                results.append(
+                    MirrorResult(
+                        name,
+                        url,
+                        False,
+                        f"destination {destination} already exists at {remote_sha}; "
+                        "use a review branch or --allow-existing after comparing histories",
+                    )
+                )
+                continue
+
+            refspec = f"{source_sha}:refs/heads/{destination}"
+            if dry_run:
+                state = f"existing {remote_sha}" if remote_sha else "new branch"
+                results.append(
+                    MirrorResult(
+                        name,
+                        url,
+                        True,
+                        f"dry-run: git push {url} {refspec} ({state})",
+                    )
+                )
+                continue
+
+            rc, out = self._run(["git", "push", "--", url, refspec])
             results.append(
                 MirrorResult(
                     name, url, rc == 0, out.splitlines()[-1] if out else "pushed"

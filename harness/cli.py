@@ -778,9 +778,23 @@ def preflight(
 
 @app.command()
 def mirror(
-    ref: str = typer.Option("main", "--ref", help="Git ref/branch to push"),
+    source_ref: str = typer.Option(
+        "HEAD",
+        "--source-ref",
+        "--ref",
+        help="Source Git ref; defaults to checked-out HEAD",
+    ),
+    destination: str = typer.Option(
+        "main", "--destination", help="Destination branch name"
+    ),
     to: list[str] = typer.Option(
-        None, "--to", help="Mirror targets from [mirror] config; defaults to all"
+        None, "--to", help="Mirror target names; defaults to every resolved remote"
+    ),
+    remote: list[str] = typer.Option(
+        None, "--remote", help="NAME=URL mirror; repeatable and overrides config"
+    ),
+    repository: Path = typer.Option(
+        Path("."), "--repository", help="Source Git repository directory"
     ),
     config: Path | None = typer.Option(
         None, "--config", help="Path to omni-project.toml"
@@ -793,23 +807,49 @@ def mirror(
         "--batch",
         help="Non-interactive: fail fast instead of prompting for SSH passphrase",
     ),
+    allow_non_head: bool = typer.Option(
+        False,
+        "--allow-non-head",
+        help="Allow a source ref different from checked-out HEAD",
+    ),
+    allow_existing: bool = typer.Option(
+        False,
+        "--allow-existing",
+        help="Allow pushing to an existing destination after history review",
+    ),
 ) -> None:
-    """Push the current repo's code to one or more mirror remotes.
+    """Push one exact commit to one or more mirror destinations.
 
     Auth works the same whether a remote is HTTPS (gh web session / credential
     helper) or SSH (agent/keychain) -- the command does not depend on either.
-    Remotes are read from the [mirror] table of omni-project.toml. One
-    unreachable remote is reported but does not abort the others.
+    Remotes come from --remote NAME=URL or the project mirror table. Existing
+    destination branches and non-HEAD source refs fail closed by default.
     """
-    config = _runtime_config(config)
-    cfg = load_config(config)
-    remotes = cfg.get("mirror", {})
+    repository = repository.resolve()
+    if not (repository / ".git").exists():
+        raise typer.BadParameter(f"not a Git repository: {repository}")
+    remotes: dict[str, str] = {}
+    if config is not None or not remote:
+        config = _runtime_config(config)
+        remotes.update(load_config(config).get("mirror", {}))
+    for assignment in remote or []:
+        name, separator, url = assignment.partition("=")
+        if not separator or not name or not url:
+            raise typer.BadParameter("remote must be NAME=URL")
+        remotes[name] = url
     if not remotes:
         typer.echo("No [mirror] remotes configured in omni-project.toml", err=True)
         raise typer.Exit(code=1)
 
     targets = to or sorted(remotes)
-    results = GitMirror(remotes, batch=batch).push(ref, targets, dry_run=dry_run)
+    results = GitMirror(remotes, cwd=str(repository), batch=batch).push(
+        source_ref,
+        destination,
+        targets,
+        dry_run=dry_run,
+        allow_non_head=allow_non_head,
+        allow_existing=allow_existing,
+    )
 
     any_fail = False
     for r in results:
@@ -819,7 +859,7 @@ def mirror(
 
     if dry_run:
         typer.echo("\n(dry run - nothing pushed; use --apply to push)")
-    elif any_fail:
+    if any_fail:
         raise typer.Exit(code=1)
 
 
