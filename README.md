@@ -316,3 +316,24 @@ uv run pytest
 
 All adapter tests mock `subprocess.run`; no live network calls are made
 against GitHub, GitLab, or Jira in the standard test suite.
+
+## Releases
+
+CI builds a standalone [PyApp](https://ofek.dev/pyapp/) binary (Linux, macOS
+arm64, Windows) for omni-sync via `uv`:
+
+- **Every merge to `main`** publishes an auto patch release `1.0.<run-number>`.
+- **Pushing a `v1.1.0`-style tag** cuts that exact version (minor/major bump).
+
+Release notes and `CHANGELOG.md` are generated from Conventional Commits by
+[git-cliff](https://git-cliff.org) (`cliff.toml`), run through `mise`. Use
+Conventional Commit prefixes (`feat:`, `fix:`, `docs:`, `ci:`, …) so changes
+are grouped correctly. Workflows: [.github/workflows/ci.yml](.github/workflows/ci.yml)
+(tests + schema validation on every PR) and
+[.github/workflows/release.yml](.github/workflows/release.yml).
+
+To cut a minor/major release:
+
+```sh
+git tag v1.1.0 && git push origin v1.1.0   # release.yml builds + publishes
+```

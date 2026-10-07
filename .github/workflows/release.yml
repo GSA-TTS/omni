@@ -1,0 +1,138 @@
+name: Release
+
+# Publishes a standalone PyApp binary of omni-sync.
+#
+#   * Every merge to main  -> auto patch release  1.0.<github.run_number>
+#   * Push a tag v1.1.0     -> release that exact version (minor/major bump)
+#
+# PyApp (https://ofek.dev/pyapp/) wraps the uv-built wheel into a single
+# self-bootstrapping executable per OS/arch. git-cliff generates the notes.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          else
+            # Patch stream off main: 1.0.<run_number>
+            echo "version=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "tag=v1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Rust (for PyApp)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Set wheel version
+        shell: bash
+        run: uv version "$VERSION"
+
+      - name: Build wheel
+        shell: bash
+        run: uv build --wheel
+
+      - name: Build PyApp binary
+        shell: bash
+        env:
+          PYAPP_PROJECT_NAME: omni-sync
+          PYAPP_PROJECT_VERSION: ${{ env.VERSION }}
+          PYAPP_EXEC_SPEC: "harness.cli:app"
+          PYAPP_PYTHON_VERSION: "3.12"
+          PYAPP_UV_ENABLED: "1"
+        run: |
+          # Point PyApp at the locally built wheel, then compile the launcher.
+          wheel="$(ls dist/omni_sync-*.whl | head -1)"
+          export PYAPP_PROJECT_PATH="$PWD/$wheel"
+          cargo install pyapp --locked --root "$RUNNER_TEMP/pyapp"
+          bin="$RUNNER_TEMP/pyapp/bin/pyapp${{ matrix.ext }}"
+          out="omni-sync-${VERSION}-${{ matrix.target }}${{ matrix.ext }}"
+          mv "$bin" "$out"
+          echo "ARTIFACT=$out" >> "$GITHUB_ENV"
+
+      - name: Smoke-test the binary (non-Windows)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: ./"$ARTIFACT" --help
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omni-sync-${{ matrix.target }}
+          path: ${{ env.ARTIFACT }}
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Generate release notes (git-cliff)
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          mise exec git-cliff -- git cliff --tag "$TAG" --output CHANGELOG.md
+          mise exec git-cliff -- git cliff --tag "$TAG" --latest --strip header --output RELEASE_NOTES.md
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: omni-sync ${{ needs.version.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          files: artifacts/**/*
+          fail_on_unmatched_files: true

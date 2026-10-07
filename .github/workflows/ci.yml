@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Validate committed config against schema
+        run: |
+          uv run python -c "
+          from pathlib import Path
+          from harness.config import validate_config
+          import tomllib
+          validate_config(tomllib.load(open('omni-project.toml','rb')), source=Path('omni-project.toml'))
+          print('omni-project.toml valid')
+          "

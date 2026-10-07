@@ -5,6 +5,7 @@ gh = "latest"
 glab = "latest"
 acli = "latest"
 betterleaks = "latest"
+git-cliff = "latest"
 
 [env]
 CLOUDGOV_GLAB_HOST = "workshop.cloud.gov"
