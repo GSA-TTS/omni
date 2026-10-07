@@ -62,6 +62,10 @@ provider content. Do not commit it or send it outside the authorized boundary.
 The default `@me` query does not load `users.toml`; email filters load the local
 roster to translate provider usernames and fail closed when a mapping is absent.
 
+This issue-board workflow is not a prerequisite for code-only mirroring. Do not
+run `board` merely to push Git refs; it can fail on unrelated issue-provider
+configuration and adds no source-provenance evidence.
+
 ## Bootstrap a Fresh Repository
 
 Download the latest platform binary and `SHA256SUMS.txt` from
@@ -127,6 +131,102 @@ GitHub Helix, GitLab, and Jira Mermaid Kanban blocks, and linked detail tables.
 Filter with repeatable `--relationship`, `--user`, `--label`, and `--target`, or
 with `--state`, `--search`, `--limit`, and `--body-limit`. Each board uses its
 provider-specific configured issue URL so ticket links resolve directly.
+
+## Safely Mirror a Repository
+
+Repository creation and protected-branch reconciliation are provisioning tasks,
+not implicit `mirror` behavior. Obtain explicit approval before creating a
+remote repository or pushing. Never force-push a non-empty destination.
+
+Run Omni independently of the source repository:
+
+```sh
+# Preferred: verified standalone release binary
+/path/to/omni-sync mirror --repository /path/to/source \
+  --remote helix=git@github.helix.gsa.gov:org/repo.git \
+  --source-ref HEAD --destination main --to helix --dry-run
+
+# Source-checkout fallback
+uv run --project /path/to/omni omni-sync mirror \
+  --repository /path/to/source \
+  --remote helix=git@github.helix.gsa.gov:org/repo.git \
+  --source-ref HEAD --destination main --to helix --dry-run
+```
+
+Do not use `mise exec -- uv run omni-sync` from an unrelated checkout: mise can
+provide `uv`, but `uv run` resolves the current project's dependencies and may
+not contain Omni.
+
+### Source provenance gate
+
+1. Inspect `git -C <source> status --short --branch`, `HEAD`, and upstream.
+2. Run `git -C <source> fsck --connectivity-only --no-dangling`.
+3. Prefer `--source-ref HEAD`. Omni resolves it to a commit SHA and pushes the
+   explicit `SHA:refs/heads/<destination>` refspec.
+4. Read the dry-run output and compare the source SHA to the intended pin.
+5. If a named local branch differs from checked-out `HEAD`, Omni refuses it
+   unless `--allow-non-head` is explicit.
+
+This prevents a detached checkout from accidentally pushing a stale local
+`main`, which occurred during a live mirror session.
+
+### Destination gate
+
+Omni probes each destination branch before pushing. An existing branch is
+refused by default. For an empty target, apply the reviewed dry run:
+
+```sh
+/path/to/omni-sync mirror --repository /path/to/source \
+  --remote helix=git@github.helix.gsa.gov:org/repo.git \
+  --source-ref HEAD --destination main --to helix --apply --batch
+```
+
+For a non-empty or protected target with unrelated history, push a review branch
+instead of overwriting `main`, then open a human-reviewed PR/MR:
+
+```sh
+/path/to/omni-sync mirror --repository /path/to/source \
+  --remote workshop=git@workshop.cloud.gov:group/repo.git \
+  --source-ref HEAD --destination mirror/source-<short-sha> \
+  --to workshop --apply --batch
+```
+
+Use `--allow-existing` only after comparing both histories and confirming a
+normal non-force push is intended. Omni never adds or rewrites local Git remotes
+for these inline URLs.
+
+### Provider CLI compatibility and authentication
+
+- GitHub Enterprise: `gh repo view` has no portable `--hostname` flag. Use
+  `GH_HOST=github.helix.gsa.gov gh repo view org/repo` or
+  `gh api --hostname github.helix.gsa.gov repos/org/repo`.
+- GitLab: use `glab api --hostname workshop.cloud.gov ...`; do not rely on
+  `glab auth status` without a host because it may inspect unrelated
+  `gitlab.com` configuration. Some `glab` versions do not support `api --jq`;
+  request JSON and pipe it to a local `jq` invocation when field selection is
+  needed.
+- Omni loads the selected config's sibling `.env` for Omni subprocesses. It
+  does not export that file into later arbitrary shell commands. For an approved
+  direct `glab` call, load the environment in that command's shell without
+  printing token values, or configure host authentication in `glab`.
+- A GitLab `404` can mean either a missing project or a token that cannot see
+  the namespace. Verify authenticated `glab api user --hostname <host>` before
+  attempting creation. A `401` is an authentication failure, not evidence that
+  the project is absent. If project `permissions` is null, inspect only the
+  authenticated user's effective membership/access level; do not dump the full
+  member list because it contains account PII.
+- Some namespaces declare a configuration repository as the source of truth for
+  projects and roles. Follow that IaC/change-review path instead of direct API
+  creation when present. A direct creation attempt returning “already taken” is
+  not proof that the path is safe to overwrite; refetch it with valid auth.
+
+After applying, verify `git ls-remote` returns the exact expected source SHA.
+Set a remote default branch only after its branch exists. Preserve accidental or
+legacy refs for audit unless deletion is separately approved.
+
+Never place credentials in a mirror URL. Omni rejects scheme-based URLs with
+embedded usernames/passwords; use the provider credential helper, SSH agent, or
+approved environment-based CLI authentication instead.
 
 ## `--body-mode` (sync)
 
