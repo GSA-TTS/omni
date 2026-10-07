@@ -4,7 +4,7 @@ Enterprise Server (e.g. github.helix.gsa.gov) via the GH_HOST env var.
 from __future__ import annotations
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
-from harness.models import CanonicalIssue
+from harness.models import CanonicalIssue, OpenIssue
 
 _ISSUE_FIELDS = "title,body,state,labels,assignees,number"
 
@@ -33,6 +33,34 @@ class GitHubAdapter(BaseIssueAdapter):
             labels=[label["name"] for label in data.get("labels", [])],
             assignees=[a["login"] for a in data.get("assignees", [])],
         )
+
+    def list_open_authored_or_assigned(self, limit: int = 100) -> list[OpenIssue]:
+        """List open issues authored by or assigned to the authenticated user."""
+        found: dict[int, dict] = {}
+        for role_flag in ("--author", "--assignee"):
+            data = self._run_cli(
+                [
+                    "gh", "issue", "list", "-R", f"{self.host}/{self.repo}",
+                    "--state", "open", role_flag, "@me", "--limit", str(limit),
+                    "--json", "number,title,body,labels,url",
+                ],
+                env_overrides=self._env(),
+            )
+            if not isinstance(data, list):
+                raise AdapterError(f"Unexpected gh issue list output for {self.repo}")
+            for item in data:
+                found[int(item["number"])] = item
+        return [
+            OpenIssue(
+                provider=self.host,
+                issue_id=str(number),
+                title=item.get("title") or "",
+                body=item.get("body") or "",
+                labels=tuple(label["name"] for label in item.get("labels", [])),
+                url=item.get("url") or f"https://{self.host}/{self.repo}/issues/{number}",
+            )
+            for number, item in sorted(found.items())
+        ]
 
     def create_issue(self, issue: CanonicalIssue) -> str:
         argv = [

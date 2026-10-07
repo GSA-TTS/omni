@@ -211,6 +211,24 @@ Batch commands continue processing independent targets or tickets after an
 item fails, but return exit code `1` if any item failed. An exit code of `0`
 therefore means the entire requested batch succeeded.
 
+Render open issues authored by or assigned to the authenticated user across
+GitHub.com, GitHub Helix, GitLab, and Jira:
+
+```sh
+uv run omni-sync board
+uv run omni-sync board --output open-issues.md --body-limit 240
+```
+
+The report contains one Mermaid Kanban board per provider so each board can use
+its own configured issue URL template. Set optional `[board]` values `gh_tts_url`,
+`gh_helix_url`, `gl_cg_url`, and `jira_mod_url`; omitted values are derived from
+the configured host and resource. Templates use `#TICKET#` for the issue ID.
+Direct links are also included in the details
+table below each board. Repository/project values and host overrides come from
+the selected project context (`omni-project.toml` plus its sibling `.env`).
+Independent provider failures are rendered in the report and produce exit code
+`1` after the remaining providers have been queried.
+
 Diff an issue between two systems:
 
 ```sh
@@ -266,7 +284,7 @@ Key safety invariants carried over from the source tooling:
 
 ```
 harness/
-├── cli.py                     # Entry point: create, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
+├── cli.py                     # Entry point: create, board, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
 ├── config.py                  # omni-project.toml loader + schema validation + label/assignee mapping
 ├── workspace.py               # Discover omni-project.toml upward from CWD
 ├── identity.py                # users.toml roster (email-pivoted cross-host lookups)

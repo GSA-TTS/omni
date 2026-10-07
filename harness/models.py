@@ -54,6 +54,18 @@ class CanonicalIssue:
         return compute_diff(self, other)
 
 
+@dataclass(frozen=True)
+class OpenIssue:
+    """Read-only issue summary used by cross-provider reporting."""
+
+    provider: str
+    issue_id: str
+    title: str
+    body: str
+    labels: tuple[str, ...]
+    url: str
+
+
 @dataclass
 class FieldDelta:
     """A single detected difference between two canonical issues."""

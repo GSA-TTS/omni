@@ -3,8 +3,10 @@ workshop.cloud.gov via the GITLAB_HOST env var.
 """
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from harness.adapters.base import AdapterError, BaseIssueAdapter
-from harness.models import CanonicalIssue
+from harness.models import CanonicalIssue, OpenIssue
 
 
 class GitLabAdapter(BaseIssueAdapter):
@@ -32,6 +34,34 @@ class GitLabAdapter(BaseIssueAdapter):
             labels=list(data.get("labels", [])),
             assignees=[a["username"] for a in data.get("assignees", [])],
         )
+
+    def list_open_authored_or_assigned(self, limit: int = 100) -> list[OpenIssue]:
+        """List open issues authored by or assigned to the authenticated user."""
+        project = quote(self.repo, safe="")
+        found: dict[int, dict] = {}
+        for scope in ("created_by_me", "assigned_to_me"):
+            data = self._run_cli(
+                [
+                    "glab", "api",
+                    f"projects/{project}/issues?state=opened&scope={scope}&per_page={limit}",
+                ],
+                env_overrides=self._env(),
+            )
+            if not isinstance(data, list):
+                raise AdapterError(f"Unexpected GitLab issue list output for {self.repo}")
+            for item in data:
+                found[int(item["iid"])] = item
+        return [
+            OpenIssue(
+                provider=self.host,
+                issue_id=str(iid),
+                title=item.get("title") or "",
+                body=item.get("description") or "",
+                labels=tuple(item.get("labels") or []),
+                url=item.get("web_url") or f"https://{self.host}/{self.repo}/-/issues/{iid}",
+            )
+            for iid, item in sorted(found.items())
+        ]
 
     def create_issue(self, issue: CanonicalIssue) -> str:
         argv = [
