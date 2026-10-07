@@ -31,9 +31,16 @@ class AcliJiraAdapter(BaseIssueAdapter):
     description field. Milestones arrive pre-encoded as labels by the caller.
     """
 
-    def __init__(self, acli_bin: str = "acli", project_key: str = "FPDF"):
+    def __init__(
+        self,
+        acli_bin: str,
+        project_key: str,
+        *,
+        expected_comment_author: str | None = None,
+    ):
         self.acli_bin = acli_bin
         self.project_key = project_key
+        self.expected_comment_author = (expected_comment_author or "").strip()
         self._view_cache: dict[str, dict | None] = {}
 
     # ---- reads -------------------------------------------------------------
@@ -262,11 +269,22 @@ class AcliJiraAdapter(BaseIssueAdapter):
     ) -> tuple[bool, str]:
         """Create or update the single marked sync comment in place.
 
-        Finds our comment by its leading marker line (matched on content, not
-        author, so it survives credential rotation). Never touches any other
-        comment or the description field.
+        Finds our comment by its leading marker line and verifies its author
+        against the gitignored JIRA_COMMENT_AUTHOR identity before updating.
+        Never touches any other comment or the description field.
         """
         existing = find_sync_comment(self.list_comments(issue_id))
+        if existing:
+            actual_author = str(existing.get("author") or "").strip()
+            if not self.expected_comment_author:
+                raise AdapterError(
+                    "JIRA_COMMENT_AUTHOR is required to update a managed Jira comment"
+                )
+            if actual_author != self.expected_comment_author:
+                raise AdapterError(
+                    "Managed Jira comment author does not match JIRA_COMMENT_AUTHOR; "
+                    "refusing update"
+                )
 
         if dry_run:
             return (

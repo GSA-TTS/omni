@@ -403,7 +403,9 @@ def sync_jira_from_github_cmd(
     cfg = load_config(config)
     gh = GitHubRestAdapter(cfg["github"]["org"], cfg["jira"].get("project_key", "FPDF"))
     jira = AcliJiraAdapter(
-        cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"]
+        cfg["jira"].get("acli_bin", "acli"),
+        cfg["jira"]["project_key"],
+        expected_comment_author=os.environ.get("JIRA_COMMENT_AUTHOR"),
     )
     repos = repo or cfg["github"]["repos"]
 

@@ -107,8 +107,9 @@ it in `.env`:
 3. Set it in `.env`:
    ```sh
    JIRA_BASE_URL=https://gsa-standard.atlassian-us-gov-mod.net
-   JIRA_EMAIL=your.name@gsa.gov
-   JIRA_API_TOKEN=<paste token>
+JIRA_EMAIL=your.name@gsa.gov
+JIRA_API_TOKEN=<paste token>
+JIRA_COMMENT_AUTHOR="Your Display Name"
    ```
 
 For the `acli`-based GitHub↔Jira flow, enable GovCloud mode once and log in
@@ -121,6 +122,11 @@ echo "$JIRA_API_TOKEN" | acli jira auth login \
   --email "$JIRA_EMAIL" --token
 acli jira auth status
 ```
+
+`JIRA_COMMENT_AUTHOR` must exactly match the `author` string returned by
+`acli jira workitem comment list --json` for comments created by your Jira
+identity. Omni refuses to update a marked sync comment when this value is
+missing or does not match; creating the first managed comment remains allowed.
 
 ### GitHub (`gh`) — SSH or `gh auth login`
 
