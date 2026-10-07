@@ -62,6 +62,34 @@ provider content. Do not commit it or send it outside the authorized boundary.
 The default `@me` query does not load `users.toml`; email filters load the local
 roster to translate provider usernames and fail closed when a mapping is absent.
 
+## Bootstrap a Fresh Repository
+
+Download the latest platform binary and `SHA256SUMS.txt` from
+`GSA-TTS/omni`, verify its digest, then create all three config files without a
+source checkout or installed Python:
+
+```sh
+gh release download --repo GSA-TTS/omni \
+  --pattern 'omni-sync-*-aarch64-apple-darwin' \
+  --pattern SHA256SUMS.txt
+artifact="$(find . -maxdepth 1 -name 'omni-sync-*-aarch64-apple-darwin' -print -quit)"
+expected="$(awk -v name="${artifact#./}" '$2 == name { print $1 }' SHA256SUMS.txt)"
+test -n "$expected" && test "$(shasum -a 256 "$artifact" | awk '{print $1}')" = "$expected"
+chmod +x omni-sync-*-aarch64-apple-darwin
+
+./omni-sync-*-aarch64-apple-darwin init --directory . \
+  --github-org GSA-TTS \
+  --github-repo example-repo \
+  --jira-project-key TEST
+./omni-sync-*-aarch64-apple-darwin validate
+```
+
+For every schema field, repeat `--project PATH=TOML_VALUE`. Use `--user
+EMAIL.FIELD=TOML_VALUE` and `--group SLUG.FIELD=TOML_VALUE` for roster data.
+The command validates all generated TOML before writing. Existing files are
+preserved unless `--force` is explicit. Never pass secrets on command lines;
+populate the generated gitignored `.env` through an approved secret mechanism.
+
 ## Supported commands
 
 | Command | Purpose |
@@ -70,6 +98,8 @@ roster to translate provider usernames and fail closed when a mapping is absent.
 | `omni-sync preflight` | Read-only: verify each configured target exists, has issues enabled, and is writable. Run before create/sync. |
 | `omni-sync create <title> <body> --to <target>...` | Create the same issue on 1+ targets. |
 | `omni-sync board [filters]` | Write one consolidated Markdown issue-context file with provider boards and linked details. |
+| `omni-sync init [flags]` | Create and validate `omni-project.toml`, `users.toml`, and `.env` in a fresh repository. |
+| `omni-sync validate` | Validate project and roster TOML without contacting providers. |
 | `omni-sync pr <title> --base <b> --head <h> --to <target>...` | Open the same PR/MR across GitHub/GitLab targets (`--draft` supported). |
 | `omni-sync diff <src> <src_id> <tgt> <tgt_id>` | Field-level diff between two issues. |
 | `omni-sync sync <src> <src_id> <tgt> <tgt_id> --direction <dir> --body-mode <mode> [--apply]` | Reconcile drift one-directionally. |

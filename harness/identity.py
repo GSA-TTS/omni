@@ -100,7 +100,7 @@ class UserRoster:
         return out
 
 
-def _validate_users(data: dict, source: Path) -> None:
+def _validate_users(data: dict, source: Path | None) -> None:
     """Validate users.toml against schema/users.schema.json if jsonschema is present.
 
     Falls back to a minimal structural check otherwise. Exits on failure so a
@@ -123,7 +123,8 @@ def _validate_users(data: dict, source: Path) -> None:
     except (
         jsonschema.ValidationError
     ) as exc:  # pragma: no cover - exercised when installed
-        sys.exit(f"users.toml invalid in {source}: {exc.message}")
+        location = f" in {source}" if source else ""
+        sys.exit(f"users.toml invalid{location}: {exc.message}")
 
     users = {email.lower() for email in data.get("users", {})}
     for group, entry in data.get("groups", {}).items():
@@ -132,6 +133,6 @@ def _validate_users(data: dict, source: Path) -> None:
         )
         if unknown:
             sys.exit(
-                f"users.toml invalid in {source}: group {group!r} references unknown users: "
+                f"users.toml invalid{f' in {source}' if source else ''}: group {group!r} references unknown users: "
                 f"{', '.join(unknown)}"
             )
