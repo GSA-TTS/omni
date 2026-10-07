@@ -26,12 +26,13 @@ from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
 from harness.identity import UserRoster
 from harness.models import CanonicalIssue
+from harness.resources import resource_text
 from harness.workspace import (
     LOCAL_ONLY,
     config_path,
     find_workspace,
     missing_local_files,
-    template_for,
+    template_name,
 )
 
 app = typer.Typer(help="Unified issue CLI across GitHub, GitHub Enterprise, GitLab, and Jira.")
@@ -646,29 +647,20 @@ def init(
     files that already exist unless --force. The created files are gitignored
     and must be filled in with real values.
     """
-    import shutil
-
     ws = find_workspace()
-    created, skipped, missing_template = [], [], []
+    created, skipped = [], []
     for name in LOCAL_ONLY:
         dest = ws / name
         if dest.exists() and not force:
             skipped.append(name)
             continue
-        template = template_for(name)
-        if not template.exists():
-            missing_template.append(name)
-            continue
-        shutil.copyfile(template, dest)
+        dest.write_text(resource_text(template_name(name)), encoding="utf-8")
         created.append(name)
 
     for name in created:
         typer.echo(f"created {ws / name}")
     for name in skipped:
         typer.echo(f"skipped {name} (exists; use --force to overwrite)")
-    for name in missing_template:
-        typer.echo(f"no template for {name}", err=True)
-
     if created:
         typer.echo("\nFill in the created files with real values. They are gitignored.")
 

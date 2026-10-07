@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from harness.identity import UserRoster, _validate_users
+from harness.resources import resource_text
 
 _EXAMPLE = Path(__file__).resolve().parent.parent / "users.toml.example"
 
@@ -11,6 +12,11 @@ _EXAMPLE = Path(__file__).resolve().parent.parent / "users.toml.example"
 def test_example_roster_validates_and_loads():
     roster = UserRoster.load(_EXAMPLE)  # validate=True by default
     assert roster.username_for_target("gh-tts", "person.one@agency.gov") == "gh-login-1"
+
+
+def test_roster_assets_are_available_as_runtime_resources():
+    assert "[users." in resource_text("users.toml.example")
+    assert '"groups"' in resource_text("schema/users.schema.json")
 
 
 def test_valid_roster_passes():

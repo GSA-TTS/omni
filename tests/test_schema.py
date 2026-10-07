@@ -3,6 +3,7 @@ import tomllib
 import pytest
 
 from harness.config import validate_config
+from harness.resources import resource_text
 
 _VALID = """
 schema_version = 1
@@ -27,6 +28,11 @@ def test_committed_project_config_validates():
 
     path = Path(__file__).resolve().parent.parent / "omni-project.toml"
     validate_config(_cfg(path.read_text()), source=path)
+
+
+def test_project_schema_is_available_as_runtime_resource():
+    schema = resource_text("schema/omni-project.schema.json")
+    assert '"schema_version"' in schema
 
 
 def test_unsupported_schema_version_exits():
