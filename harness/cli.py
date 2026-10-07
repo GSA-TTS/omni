@@ -159,6 +159,7 @@ def create(
 ) -> None:
     """Create the same issue across one or more target systems."""
     results: dict[str, str] = {}
+    any_fail = False
 
     for target in to:
         adapter = _resolve_adapter(target)
@@ -168,11 +169,12 @@ def create(
             remote_id = adapter.create_issue(canonical)
         except AdapterError as exc:
             typer.echo(f"FAILED on {target}: {exc}", err=True)
+            any_fail = True
             continue
         results[target] = remote_id
         typer.echo(f"Created on {target}: {remote_id}")
 
-    if not results:
+    if any_fail or not results:
         raise typer.Exit(code=1)
 
 
@@ -284,15 +286,24 @@ def sync_jira_from_github_cmd(
     if limit:
         keys = keys[:limit]
 
+    any_fail = False
     for key in keys:
-        result = sync_jira_from_github(grouped[key], jira, key, cfg, dry_run=dry_run)
+        try:
+            result = sync_jira_from_github(grouped[key], jira, key, cfg, dry_run=dry_run)
+        except AdapterError as exc:
+            typer.echo(f"{key}: ERROR: {exc}", err=True)
+            any_fail = True
+            continue
         actions = "; ".join(result["actions"]) or "-"
         typer.echo(f"{key} (#{result['gh_number']}, {result['linked_count']} linked): {actions}")
         for err in result["errors"]:
             typer.echo(f"  ERROR: {err}", err=True)
+            any_fail = True
 
     if dry_run:
         typer.echo("\n(dry run - no changes written; use --apply to sync)")
+    if any_fail:
+        raise typer.Exit(code=1)
 
 
 @gh_jira.command("backfill-github-from-jira")
@@ -346,16 +357,20 @@ def backfill_github_from_jira_cmd(
     if limit:
         plans = plans[:limit]
 
+    any_fail = False
     for plan in plans:
         if plan["action"] == "backfill":
             ok, msg = gh.add_assignee(plan["repo"], plan["gh_number"], plan["login"], dry_run=dry_run)
             status = msg if ok else f"ERROR: {msg}"
+            any_fail = any_fail or not ok
         else:
             status = f"skip ({plan['reason']})"
         typer.echo(f"{plan['key']} #{plan['gh_number']}: {status}")
 
     if dry_run:
         typer.echo("\n(dry run - no changes written; use --apply to backfill)")
+    if any_fail:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -478,6 +493,7 @@ def pr(
 ) -> None:
     """Open the same pull/merge request across one or more GitHub/GitLab targets."""
     results: dict[str, str] = {}
+    any_fail = False
     for target in to:
         adapter = _resolve_adapter(target)
         assignees = _resolve_assignees(target, assignee or [])
@@ -487,10 +503,11 @@ def pr(
             )
         except AdapterError as exc:
             typer.echo(f"FAILED on {target}: {exc}", err=True)
+            any_fail = True
             continue
         results[target] = url
         typer.echo(f"Opened on {target}: {url}")
-    if not results:
+    if any_fail or not results:
         raise typer.Exit(code=1)
 
 

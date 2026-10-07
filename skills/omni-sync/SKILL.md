@@ -37,6 +37,10 @@ Targets: `gh-tts` (github.com), `gh-helix` (GHES), `gl-cg` (GitLab cloud.gov),
 **Defaults are safe:** `sync` and the `gh-jira` commands default to `--dry-run`.
 Pass `--apply` to write.
 
+Batch commands are best-effort: they report all independent results, then exit
+with code `1` if any target or ticket failed. Exit code `0` means the complete
+requested batch succeeded.
+
 ## `--body-mode` (sync)
 
 How the source body is written onto the target issue:

@@ -207,6 +207,10 @@ Create the same issue across multiple targets:
 uv run omni-sync create "Migrate core auth service" "Update the OIDC endpoints." --to gh-tts --to gh-helix --to jira-mod
 ```
 
+Batch commands continue processing independent targets or tickets after an
+item fails, but return exit code `1` if any item failed. An exit code of `0`
+therefore means the entire requested batch succeeded.
+
 Diff an issue between two systems:
 
 ```sh
