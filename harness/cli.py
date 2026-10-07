@@ -86,6 +86,7 @@ _TARGET_RESOURCE_ENV = {
 
 
 def _resolve_adapter(target: str) -> BaseIssueAdapter:
+    _load_dotenv()
     if target not in _ADAPTER_BUILDERS:
         raise typer.BadParameter(f"Unknown target '{target}'. Valid: {', '.join(_ADAPTER_BUILDERS)}")
     resource_env = _TARGET_RESOURCE_ENV[target]

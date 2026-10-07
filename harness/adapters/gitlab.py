@@ -65,8 +65,13 @@ class GitLabAdapter(BaseIssueAdapter):
             "--description",
             issue.body_with_anchor(),
         ]
-        if issue.status == "CLOSED":
-            argv.append("--close")
-        else:
-            argv.append("--reopen")
         self._run_cli(argv, env_overrides=self._env(), parse_json=False)
+
+        # State changes use dedicated subcommands; `glab issue update` has no
+        # --close/--reopen flags.
+        state_cmd = "close" if issue.status == "CLOSED" else "reopen"
+        self._run_cli(
+            ["glab", "issue", state_cmd, issue_id, "-R", self.repo],
+            env_overrides=self._env(),
+            parse_json=False,
+        )
