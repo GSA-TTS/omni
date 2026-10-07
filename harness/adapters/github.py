@@ -80,3 +80,10 @@ class GitHubAdapter(BaseIssueAdapter):
                 env_overrides=self._env(),
                 parse_json=False,
             )
+
+    def add_comment(self, issue_id: str, body: str) -> None:
+        self._run_cli(
+            ["gh", "issue", "comment", issue_id, "-R", f"{self.host}/{self.repo}", "--body", body],
+            env_overrides=self._env(),
+            parse_json=False,
+        )

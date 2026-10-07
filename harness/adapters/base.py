@@ -5,8 +5,12 @@ import json
 import os
 import subprocess
 from abc import ABC, abstractmethod
+from typing import Literal
 
 from harness.models import CanonicalIssue
+
+# How a sync writes the source body onto the target issue.
+BodyMode = Literal["replace", "append", "comment"]
 
 
 class AdapterError(RuntimeError):
@@ -26,7 +30,11 @@ class BaseIssueAdapter(ABC):
 
     @abstractmethod
     def update_issue(self, issue_id: str, issue: CanonicalIssue) -> None:
-        """Apply canonical field changes to an existing provider issue."""
+        """Apply canonical field changes to an existing provider issue (replace body)."""
+
+    def add_comment(self, issue_id: str, body: str) -> None:
+        """Post a comment on the issue. Override in adapters that support it."""
+        raise AdapterError(f"{type(self).__name__} does not support comments")
 
     def _run_cli(
         self,

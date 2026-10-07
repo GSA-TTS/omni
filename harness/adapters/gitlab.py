@@ -75,3 +75,10 @@ class GitLabAdapter(BaseIssueAdapter):
             env_overrides=self._env(),
             parse_json=False,
         )
+
+    def add_comment(self, issue_id: str, body: str) -> None:
+        self._run_cli(
+            ["glab", "issue", "note", issue_id, "-R", self.repo, "--message", body],
+            env_overrides=self._env(),
+            parse_json=False,
+        )

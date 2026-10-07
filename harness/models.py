@@ -42,6 +42,8 @@ class CanonicalIssue:
     def body_with_anchor(self) -> str:
         """Return body markdown with the sync anchor footer appended."""
         clean_body = strip_anchor(self.body_markdown)
+        if "\x00" in clean_body:
+            raise ValueError("issue body contains a NUL byte, which no provider CLI accepts")
         links = " | ".join(f"{k}:{v}" for k, v in sorted(self.sync_metadata.items()))
         footer = f"<!-- {ANCHOR_PREFIX}: {self.uuid} -->\n<!-- {LINKS_PREFIX}: {links} -->"
         return f"{clean_body}\n\n{footer}" if clean_body else footer

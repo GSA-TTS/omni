@@ -151,17 +151,28 @@ def sync(
     direction: str = typer.Option(
         "left-to-right", "--direction", help="left-to-right or right-to-left"
     ),
+    body_mode: str = typer.Option(
+        "replace", "--body-mode", help="How to write the body: replace, append, or comment"
+    ),
     dry_run: bool = typer.Option(True, "--dry-run/--apply", help="Preview only (default) or apply changes"),
 ) -> None:
     """Reconcile drift between two issues, applying changes in one direction."""
     if direction not in ("left-to-right", "right-to-left"):
         raise typer.BadParameter("direction must be left-to-right or right-to-left")
+    if body_mode not in ("replace", "append", "comment"):
+        raise typer.BadParameter("body-mode must be replace, append, or comment")
 
     left_adapter = _resolve_adapter(source)
     right_adapter = _resolve_adapter(target)
     try:
         result = reconcile(
-            left_adapter, source_id, right_adapter, target_id, direction=direction, dry_run=dry_run
+            left_adapter,
+            source_id,
+            right_adapter,
+            target_id,
+            direction=direction,
+            dry_run=dry_run,
+            body_mode=body_mode,
         )
     except AdapterError as exc:
         typer.echo(f"FAILED: {exc}", err=True)
@@ -169,9 +180,9 @@ def sync(
 
     typer.echo(result.diff.render_table())
     if dry_run:
-        typer.echo("\n(dry run - no changes applied; use --apply to write changes)")
+        typer.echo(f"\n(dry run - body-mode={body_mode}; use --apply to write changes)")
     elif result.applied:
-        typer.echo(f"\nApplied changes direction={direction}")
+        typer.echo(f"\nApplied changes direction={direction} body-mode={body_mode}")
     else:
         typer.echo("\nNo changes to apply.")
 

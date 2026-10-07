@@ -14,8 +14,11 @@ def compute_diff(left: CanonicalIssue, right: CanonicalIssue) -> DiffResult:
     """Compare two canonical issues field-by-field, returning all deltas."""
     deltas: list[FieldDelta] = []
 
-    left_body = strip_anchor(left.body_markdown)
-    right_body = strip_anchor(right.body_markdown)
+    # Normalize CRLF -> LF before comparing: GitLab stores bodies LF-only, so a
+    # CRLF-authored issue would otherwise show perpetual drift and oscillate on
+    # every sync (see skills/omni-sync/known-failures.md #2).
+    left_body = strip_anchor(left.body_markdown).replace("\r\n", "\n")
+    right_body = strip_anchor(right.body_markdown).replace("\r\n", "\n")
     if left_body != right_body:
         deltas.append(FieldDelta("body_markdown", left_body, right_body))
 
