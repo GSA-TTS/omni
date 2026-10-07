@@ -18,8 +18,10 @@ risk_treatment: "mitigate"
 ## Context and Problem Statement
 
 The repository had tests and config validation but no enforced lint, type,
-coverage, or dependency-vulnerability gates. Release binaries also used Python
-3.12 while development used 3.13, and Windows artifacts were not smoke-tested.
+coverage, or dependency-vulnerability gates. PyApp release binaries also used
+Python 3.12 while development used 3.13, did not bundle Python dependencies,
+and depended on a first-run CPython download that could fail enterprise TLS
+validation. Windows artifacts were not meaningfully smoke-tested.
 
 ## Decision Drivers
 
@@ -40,10 +42,13 @@ coverage, or dependency-vulnerability gates. Release binaries also used Python
 
 ## Decision Outcome
 
-Chosen option: **Use pinned local tools in CI**. `make check` runs Ruff, mypy,
+Chosen option: **Use pinned local tools and standalone native artifacts**.
+`make check` runs Ruff, mypy,
 pytest with coverage, pip-audit, and zizmor. The initial coverage floor is 75%,
-just below the measured 76% baseline. Development and PyApp release builds use
-Python 3.13, and all release matrix binaries execute an `--help` smoke test.
+just below the measured 76% baseline. Development and standalone releases use
+Python 3.13. PyInstaller bundles CPython, application dependencies, schemas, and
+templates. Every release artifact initializes and validates a fresh repository
+with proxy-aware outbound networking directed to an unavailable local endpoint.
 All third-party actions use immutable commit SHAs with version comments. All
 Linux CI and release jobs use Ubuntu 24.04 LTS instead of the mutable
 `ubuntu-latest` label. Checkout credentials are not persisted, publishing write
@@ -56,6 +61,8 @@ with the runner-provided GitHub CLI.
 - Static and dependency failures block regressions before merge.
 - Release runtime behavior is aligned across development and artifacts.
 - Windows artifacts receive execution coverage before publication.
+- First execution does not download CPython or Python dependencies.
+- Published SHA-256 checksums support artifact verification before execution.
 - Workflow dependencies are immutable and statically scanned.
 - Linux runner migrations become explicit reviewable changes.
 
