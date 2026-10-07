@@ -40,7 +40,7 @@ class GitHubRestAdapter:
                 timeout=180,
             )
         except subprocess.CalledProcessError as exc:
-            raise AdapterError(f"gh api failed for {self.org}/{repo}: {exc.stderr.strip()}") from exc
+            raise AdapterError(f"gh api failed for {self.org}/{repo}, exit {exc.returncode}") from exc
         except subprocess.TimeoutExpired as exc:
             raise AdapterError(f"gh api timed out for {self.org}/{repo}") from exc
 
@@ -72,7 +72,7 @@ class GitHubRestAdapter:
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         except subprocess.CalledProcessError as exc:
-            return False, f"gh issue edit failed: {exc.stderr.strip()}"
+            return False, f"gh issue edit failed for {self.org}/{repo}, exit {exc.returncode}"
         return True, f"gh: assigned {login}"
 
 

@@ -159,15 +159,14 @@ class AcliJiraAdapter(BaseIssueAdapter):
     # ---- comments ----------------------------------------------------------
 
     def list_comments(self, issue_id: str) -> list[dict]:
-        try:
-            data = self._run_cli(
-                [self.acli_bin, "jira", "workitem", "comment", "list", "--key", issue_id, "--json"],
-            )
-        except AdapterError:
-            return []
+        data = self._run_cli(
+            [self.acli_bin, "jira", "workitem", "comment", "list", "--key", issue_id, "--json"],
+        )
         if isinstance(data, dict):
-            return data.get("comments", [])
-        return []
+            comments = data.get("comments")
+            if isinstance(comments, list):
+                return comments
+        raise AdapterError(f"Invalid comment list response for Jira workitem {issue_id}")
 
     def upsert_sync_comment(
         self, issue_id: str, body: str, *, dry_run: bool = False
@@ -204,12 +203,15 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
 
 def find_sync_comment(comments: list[dict]) -> dict | None:
-    """Return the existing sync comment (if any), identified by its marker line."""
-    for comment in comments:
-        body = comment.get("body") or ""
-        if body.lstrip().startswith(SYNC_COMMENT_MARKER):
-            return comment
-    return None
+    """Return one marked sync comment, failing closed when markers are ambiguous."""
+    matches = [
+        comment
+        for comment in comments
+        if str(comment.get("body") or "").lstrip().startswith(SYNC_COMMENT_MARKER)
+    ]
+    if len(matches) > 1:
+        raise AdapterError("Multiple managed Jira sync comments found; refusing an ambiguous update")
+    return matches[0] if matches else None
 
 
 def strip_sync_timestamp(body: str) -> str:

@@ -23,6 +23,14 @@ def test_metrics_count_cli_calls(mocker):
     assert adapter.metrics.count == 1
 
 
+def test_metrics_record_operation_without_issue_id_or_payload(mocker):
+    mocker.patch("subprocess.run", return_value=_ok(""))
+    adapter = AcliJiraAdapter("acli", "FPDF")
+    adapter.metrics = CliMetrics()
+    adapter.edit("FPDF-SECRET", add_labels=["sensitive-label"])
+    assert adapter.metrics.calls[0][0] == "acli jira workitem edit"
+
+
 def test_acli_get_issue_is_single_view_call_regression_guard(mocker):
     """Guard the N+1 regression: get_issue must make exactly one `workitem view`."""
     mocker.patch("subprocess.run", return_value=_ok(_WORKITEM))

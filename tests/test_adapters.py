@@ -53,6 +53,27 @@ class TestGitHubAdapter:
         with pytest.raises(AdapterError):
             adapter.get_issue("999")
 
+    def test_cli_failure_does_not_expose_arguments_or_stderr(self, mocker):
+        secret = "sensitive issue body"
+        mocker.patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(2, ["gh"], stderr=f"rejected: {secret}"),
+        )
+        adapter = GitHubAdapter("github.com", "org/repo")
+        with pytest.raises(AdapterError) as raised:
+            adapter._run_cli(["gh", "issue", "create", "--body", secret])
+        assert str(raised.value) == "Command failed (gh issue create), exit 2"
+        assert secret not in str(raised.value)
+
+    def test_non_json_output_does_not_expose_response_body(self, mocker):
+        secret = "sensitive provider response"
+        mocker.patch("subprocess.run", return_value=_mock_completed(secret))
+        adapter = GitHubAdapter("github.com", "org/repo")
+        with pytest.raises(AdapterError) as raised:
+            adapter._run_cli(["gh", "issue", "view", "1"])
+        assert str(raised.value) == "Non-JSON output from gh issue view"
+        assert secret not in str(raised.value)
+
 
 class TestGitLabAdapter:
     def test_get_issue_parses_fields(self, mocker, glab_issue_json):
