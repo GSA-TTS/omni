@@ -36,6 +36,17 @@ class BaseIssueAdapter(ABC):
         """Post a comment on the issue. Override in adapters that support it."""
         raise AdapterError(f"{type(self).__name__} does not support comments")
 
+    def create_pull_request(
+        self,
+        title: str,
+        body: str,
+        base: str,
+        head: str,
+        draft: bool = False,
+    ) -> str:
+        """Open a PR/MR. Override in adapters that support it. Returns its URL."""
+        raise AdapterError(f"{type(self).__name__} does not support pull requests")
+
     def _run_cli(
         self,
         argv: list[str],

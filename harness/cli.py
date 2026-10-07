@@ -406,6 +406,30 @@ def doctor(
         raise typer.Exit(code=1)
 
 
+@app.command("pr")
+def pr(
+    title: str,
+    base: str = typer.Option(..., "--base", help="Base/target branch to merge into"),
+    head: str = typer.Option(..., "--head", help="Source branch containing the changes"),
+    body: str = typer.Option("", "--body", help="PR/MR description"),
+    to: list[str] = typer.Option(..., "--to", help="Targets: gh-tts, gh-helix, gl-cg"),
+    draft: bool = typer.Option(False, "--draft", help="Open as a draft"),
+) -> None:
+    """Open the same pull/merge request across one or more GitHub/GitLab targets."""
+    results: dict[str, str] = {}
+    for target in to:
+        adapter = _resolve_adapter(target)
+        try:
+            url = adapter.create_pull_request(title, body, base=base, head=head, draft=draft)
+        except AdapterError as exc:
+            typer.echo(f"FAILED on {target}: {exc}", err=True)
+            continue
+        results[target] = url
+        typer.echo(f"Opened on {target}: {url}")
+    if not results:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def preflight(
     config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),

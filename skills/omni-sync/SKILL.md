@@ -22,6 +22,7 @@ are safe.
 | `omni-sync doctor` | Read-only: verify CLI install + auth, config parse, token presence. Run first. |
 | `omni-sync preflight` | Read-only: verify each configured target exists, has issues enabled, and is writable. Run before create/sync. |
 | `omni-sync create <title> <body> --to <target>...` | Create the same issue on 1+ targets. |
+| `omni-sync pr <title> --base <b> --head <h> --to <target>...` | Open the same PR/MR across GitHub/GitLab targets (`--draft` supported). |
 | `omni-sync diff <src> <src_id> <tgt> <tgt_id>` | Field-level diff between two issues. |
 | `omni-sync sync <src> <src_id> <tgt> <tgt_id> --direction <dir> --body-mode <mode> [--apply]` | Reconcile drift one-directionally. |
 | `omni-sync mirror [--to <name>...] [--apply]` | Push code to `[mirror]` remotes (HTTPS or SSH). |

@@ -87,3 +87,19 @@ class GitHubAdapter(BaseIssueAdapter):
             env_overrides=self._env(),
             parse_json=False,
         )
+
+    def create_pull_request(
+        self, title: str, body: str, base: str, head: str, draft: bool = False
+    ) -> str:
+        argv = [
+            "gh", "pr", "create",
+            "-R", f"{self.host}/{self.repo}",
+            "--base", base,
+            "--head", head,
+            "--title", title,
+            "--body", body,
+        ]
+        if draft:
+            argv.append("--draft")
+        url = self._run_cli(argv, env_overrides=self._env(), parse_json=False)
+        return str(url).strip()

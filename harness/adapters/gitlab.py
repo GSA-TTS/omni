@@ -82,3 +82,20 @@ class GitLabAdapter(BaseIssueAdapter):
             env_overrides=self._env(),
             parse_json=False,
         )
+
+    def create_pull_request(
+        self, title: str, body: str, base: str, head: str, draft: bool = False
+    ) -> str:
+        argv = [
+            "glab", "mr", "create",
+            "-R", self.repo,
+            "--source-branch", head,
+            "--target-branch", base,
+            "--title", title,
+            "--description", body,
+            "--yes",  # skip interactive prompts
+        ]
+        if draft:
+            argv.append("--draft")
+        url = self._run_cli(argv, env_overrides=self._env(), parse_json=False)
+        return str(url).strip()

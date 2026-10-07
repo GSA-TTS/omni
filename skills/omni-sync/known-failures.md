@@ -76,6 +76,29 @@ already-open issue is a safe no-op.
 
 ---
 
+## 6. PR/MR creation is interactive by default — `glab mr create` needs `--yes`
+
+`gh pr create` opens the PR non-interactively once `--title`, `--body`,
+`--base`, and `--head` are supplied. `glab mr create`, however, still prompts
+(for push, remove-source-branch, etc.) unless you pass `--yes`. The GitLab
+adapter always passes `--yes` so `omni-sync pr` never blocks waiting for input.
+
+Flag mapping handled by the adapters:
+
+| Concept | gh | glab |
+|---|---|---|
+| source branch | `--head` | `--source-branch` |
+| target branch | `--base` | `--target-branch` |
+| description | `--body` | `--description` |
+| non-interactive | (default) | `--yes` |
+| draft | `--draft` | `--draft` |
+
+Jira has no PR/MR concept; `JiraAdapter.create_pull_request` raises
+`AdapterError("...does not support pull requests")` — handle per-target, not
+globally.
+
+---
+
 ## General safety notes (verified OK, documented so they are not re-feared)
 
 - Shell metacharacters (`` ` ``, `$()`, `${}`, `&&`, `;`, `|`, `<`, `>`),
