@@ -1,11 +1,14 @@
 import tomllib
 
+import pytest
+
 from harness.config import (
     email_to_login_map,
     map_assignee,
     map_labels,
     milestone_label,
     sanitize_jira_label,
+    validate_config,
 )
 
 _CFG = tomllib.loads(
@@ -63,3 +66,24 @@ def test_milestone_label_encodes_prefix_and_sanitizes():
 
 def test_milestone_label_none_passthrough():
     assert milestone_label(None, _CFG) is None
+
+
+def test_sync_status_false_is_supported():
+    cfg = {
+        "schema_version": 1,
+        "jira": {"project_key": "FPDF"},
+        "github": {"org": "GSA-TTS", "repos": ["r1"]},
+        "sync": {"sync_status": False},
+    }
+    validate_config(cfg)
+
+
+def test_sync_status_true_fails_with_actionable_message():
+    cfg = {
+        "schema_version": 1,
+        "jira": {"project_key": "FPDF"},
+        "github": {"org": "GSA-TTS", "repos": ["r1"]},
+        "sync": {"sync_status": True},
+    }
+    with pytest.raises(SystemExit, match=r"sync_status=true is unsupported"):
+        validate_config(cfg)

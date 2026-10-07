@@ -53,6 +53,10 @@ commit it, paste it into public systems, or treat a partial report as complete.
 Configure missing provider resources or narrow the report with repeatable
 `--target` flags.
 
+Status synchronization is intentionally unsupported: setting
+`[sync].sync_status = true` fails configuration validation because Jira status
+transitions require workflow-specific mappings.
+
 ## Prerequisites
 
 Managed via [mise](https://mise.jdx.dev/):

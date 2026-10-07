@@ -63,6 +63,8 @@ def validate_config(cfg: dict, source: Path | None = None) -> None:
             f"this build expects {_SUPPORTED_SCHEMA_VERSION}"
         )
 
+    _validate_supported_settings(cfg, source)
+
     try:
         import jsonschema  # type: ignore
     except ImportError:
@@ -88,6 +90,16 @@ def _minimal_validate(cfg: dict, source: Path | None) -> None:
     repos = github.get("repos")
     if not isinstance(repos, list) or not repos:
         sys.exit(f"omni-project.toml{where}: [github].repos must be a non-empty list")
+
+
+def _validate_supported_settings(cfg: dict, source: Path | None) -> None:
+    """Reject enabled settings that this build cannot safely execute."""
+    if cfg.get("sync", {}).get("sync_status") is True:
+        where = f" in {source}" if source else ""
+        sys.exit(
+            f"omni-project.toml invalid{where}: [sync].sync_status=true is unsupported; "
+            "Jira status transitions require workflow-specific mappings"
+        )
 
 
 def _developers_from_users(users: dict[str, dict]) -> dict[str, str]:
