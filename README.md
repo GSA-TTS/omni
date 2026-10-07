@@ -268,7 +268,7 @@ Key safety invariants carried over from the source tooling:
 harness/
 ├── cli.py                     # Entry point: create, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
 ├── config.py                  # omni-project.toml loader + schema validation + label/assignee mapping
-├── workspace.py               # Discover config files upward from CWD
+├── workspace.py               # Discover omni-project.toml upward from CWD
 ├── identity.py                # users.toml roster (email-pivoted cross-host lookups)
 ├── models.py                  # CanonicalIssue, FieldDelta, DiffResult, sync anchor helpers
 ├── transformers/

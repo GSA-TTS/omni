@@ -49,7 +49,12 @@ def _warn_missing_local(workspace: Path | None = None) -> None:
         )
 
 
-def _resolve_assignees(target: str, values: list[str]) -> list[str]:
+def _runtime_config(config: Path | None = None) -> Path:
+    """Resolve a config at command execution, never at module import time."""
+    return config.resolve() if config is not None else config_path("omni-project.toml")
+
+
+def _resolve_assignees(target: str, values: list[str], workspace: Path | None = None) -> list[str]:
     """Translate assignee emails to the target host's usernames via users.toml.
 
     A value that is already a username passes through. An email with a mapping
@@ -58,7 +63,7 @@ def _resolve_assignees(target: str, values: list[str]) -> list[str]:
     """
     if not values:
         return []
-    roster = UserRoster.load(config_path("users.toml"))
+    roster = UserRoster.load(config_path("users.toml", workspace))
     resolved: list[str] = []
     for value in values:
         username = roster.resolve_assignee(target, value)
@@ -69,13 +74,13 @@ def _resolve_assignees(target: str, values: list[str]) -> list[str]:
     return resolved
 
 
-def _email_to_login_map(cfg: dict) -> dict[str, str]:
+def _email_to_login_map(cfg: dict, workspace: Path | None = None) -> dict[str, str]:
     """Jira email -> GitHub login, derived from the users.toml roster.
 
     Prefers github.com logins, falling back to Helix. Used by the
     Jira -> GitHub assignee backfill.
     """
-    roster = UserRoster.load(config_path("users.toml"))
+    roster = UserRoster.load(config_path("users.toml", workspace))
     out: dict[str, str] = {}
     for login, email in roster.github_login_to_jira_email().items():
         out.setdefault(email.lower(), login)
@@ -88,7 +93,7 @@ def _load_dotenv(path: Path | None = None) -> None:
     Lets `glab`/`acli` pick up GITLAB_TOKEN/JIRA_API_TOKEN from the gitignored
     .env the same way the shell would, without a third-party dependency.
     """
-    env_path = path or (Path(__file__).resolve().parent.parent / ".env")
+    env_path = path or config_path(".env")
     if not env_path.exists():
         return
     for line in env_path.read_text().splitlines():
@@ -247,14 +252,9 @@ def sync(
 gh_jira = typer.Typer(help="Config-driven GitHub<->Jira sync (GSA FedRAMP acli workflow).")
 app.add_typer(gh_jira, name="gh-jira")
 
-# Resolved from the workspace discovered relative to the CWD (see workspace.py),
-# so the CLI works when invoked from any directory in or above the checkout.
-_DEFAULT_CONFIG = config_path("omni-project.toml")
-
-
 @gh_jira.command("sync-jira-from-github")
 def sync_jira_from_github_cmd(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
     jira_key: str = typer.Option(None, "--jira-key", help="Only sync this key, e.g. FPDF-395"),
     repo: list[str] = typer.Option(None, "--repo", help="Limit to repo(s); defaults to config"),
     limit: int = typer.Option(0, "--limit", help="Cap processed tickets"),
@@ -265,7 +265,8 @@ def sync_jira_from_github_cmd(
     Never writes the Jira description field. GitHub is authoritative for
     engineering execution state.
     """
-    _load_dotenv()
+    config = _runtime_config(config)
+    _load_dotenv(config.parent / ".env")
     cfg = load_config(config)
     gh = GitHubRestAdapter(cfg["github"]["org"], cfg["jira"].get("project_key", "FPDF"))
     jira = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
@@ -309,7 +310,7 @@ def sync_jira_from_github_cmd(
 
 @gh_jira.command("backfill-github-from-jira")
 def backfill_github_from_jira_cmd(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
     jira_key: str = typer.Option(None, "--jira-key", help="Only process this key, e.g. FPDF-463"),
     repo: list[str] = typer.Option(None, "--repo", help="Limit to repo(s); defaults to config"),
     limit: int = typer.Option(0, "--limit", help="Cap processed items"),
@@ -320,7 +321,8 @@ def backfill_github_from_jira_cmd(
     Only acts when GitHub has no assignee, the Jira ticket is non-Done and
     assigned, and the Jira assignee maps to a known GitHub login.
     """
-    _load_dotenv()
+    config = _runtime_config(config)
+    _load_dotenv(config.parent / ".env")
     cfg = load_config(config)
     gh = GitHubRestAdapter(cfg["github"]["org"], cfg["jira"].get("project_key", "FPDF"))
     jira = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
@@ -338,7 +340,7 @@ def backfill_github_from_jira_cmd(
         typer.echo(f"FAILED: {exc}", err=True)
         raise typer.Exit(code=1)
     jira_index = build_jira_index(jira_issues if isinstance(jira_issues, list) else [])
-    email_to_login = _email_to_login_map(cfg)
+    email_to_login = _email_to_login_map(cfg, config.parent)
 
     plans: list[dict] = []
     for r in repos:
@@ -376,7 +378,7 @@ def backfill_github_from_jira_cmd(
 
 @app.command()
 def doctor(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
 ) -> None:
     """Verify provider CLI auth and config without mutating anything.
 
@@ -389,7 +391,8 @@ def doctor(
 
     ok = True
 
-    _load_dotenv()
+    config = _runtime_config(config)
+    _load_dotenv(config.parent / ".env")
 
     def check(label: str, passed: bool, detail: str = "") -> None:
         nonlocal ok
@@ -457,8 +460,8 @@ def doctor(
     check("betterleaks installed", bl_ok, "" if bl_ok else "secret scanning unavailable; see mise.toml")
 
     # --- workspace + config ---
-    ws = find_workspace()
-    check(f"workspace found ({ws})", (ws / "omni-project.toml").exists(), "" if (ws / "omni-project.toml").exists() else "no omni-project.toml above CWD")
+    ws = config.parent
+    check(f"workspace found ({ws})", config.exists(), "" if config.exists() else "no omni-project.toml above CWD")
     for name in missing_local_files(ws):
         check(f"local file present ({name})", False, "run: omni-sync init")
 
@@ -514,7 +517,7 @@ def pr(
 
 @app.command()
 def preflight(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
 ) -> None:
     """Check that each configured target exists and is writable (read-only).
 
@@ -522,7 +525,8 @@ def preflight(
     target so a create/sync fails fast with a clear message instead of a raw
     CLI error mid-run. Targets resolve from env vars (as `omni-sync create`).
     """
-    _load_dotenv()
+    config = _runtime_config(config)
+    _load_dotenv(config.parent / ".env")
     cfg = load_config(config)
     results = []
 
@@ -557,7 +561,7 @@ def preflight(
 def mirror(
     ref: str = typer.Option("main", "--ref", help="Git ref/branch to push"),
     to: list[str] = typer.Option(None, "--to", help="Mirror targets from [mirror] config; defaults to all"),
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
+    config: Path | None = typer.Option(None, "--config", help="Path to omni-project.toml"),
     dry_run: bool = typer.Option(True, "--dry-run/--apply", help="Preview (default) or push"),
     batch: bool = typer.Option(False, "--batch", help="Non-interactive: fail fast instead of prompting for SSH passphrase"),
 ) -> None:
@@ -568,6 +572,7 @@ def mirror(
     Remotes are read from the [mirror] table of omni-project.toml. One
     unreachable remote is reported but does not abort the others.
     """
+    config = _runtime_config(config)
     cfg = load_config(config)
     remotes = cfg.get("mirror", {})
     if not remotes:
@@ -604,13 +609,14 @@ def bench(
     from harness.adapters.base import CliMetrics
     from harness.testing.bench import OpMetric, render_matrix
 
-    _load_dotenv()
+    config = _runtime_config()
+    _load_dotenv(config.parent / ".env")
 
     def build_adapter():
         # Jira benchmarking uses the acli adapter (the gh-jira flow), not the
         # jira-cli-based JiraAdapter that `_resolve_adapter` returns.
         if target == "jira-mod":
-            cfg = load_config(_DEFAULT_CONFIG)
+            cfg = load_config(config)
             return AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), cfg["jira"]["project_key"])
         return _resolve_adapter(target)
 
