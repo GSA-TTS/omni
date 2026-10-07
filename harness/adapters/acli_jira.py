@@ -1,0 +1,238 @@
+"""Adapter wrapping the Atlassian CLI (`acli jira workitem`) for GSA FedRAMP
+GovCloud Jira. Transposed from the TTSE petrified-forest sync tooling.
+
+Critical design rule (from a 2026-09-21 incident): this adapter NEVER
+read-modify-writes `fields.description`. Round-tripping ADF through plain
+text flattened rich formatting on ~82 real tickets. Sync state is written to
+a single dedicated **comment** identified by a leading marker line, and only
+labels/assignee are ever edited.
+
+`acli` can only write summary, description, type, assignee, and labels -- it
+has no flag for Sprint/Fix Version, so GitHub milestones are encoded as a
+prefixed Jira label (see config.milestone_label).
+"""
+from __future__ import annotations
+
+import re
+from datetime import UTC, datetime
+
+from harness.adapters.base import AdapterError, BaseIssueAdapter
+from harness.models import CanonicalIssue
+
+SYNC_COMMENT_MARKER = "[github-sync]"
+_VIEW_FIELDS = "summary,status,assignee,labels"
+
+
+class AcliJiraAdapter(BaseIssueAdapter):
+    """GSA GovCloud Jira adapter via `acli jira workitem`.
+
+    Writes labels + assignee + an idempotent sync comment; never touches the
+    description field. Milestones arrive pre-encoded as labels by the caller.
+    """
+
+    def __init__(self, acli_bin: str = "acli", project_key: str = "FPDF"):
+        self.acli_bin = acli_bin
+        self.project_key = project_key
+
+    # ---- reads -------------------------------------------------------------
+
+    def get_issue(self, issue_id: str) -> CanonicalIssue:
+        data = self._run_cli(
+            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+        )
+        if not isinstance(data, dict):
+            raise AdapterError(f"Unexpected acli workitem view output for {issue_id}")
+        fields = data.get("fields", {})
+        status_cat = ((fields.get("status") or {}).get("statusCategory") or {}).get("name")
+        assignee = fields.get("assignee") or {}
+        return CanonicalIssue(
+            title=fields.get("summary", ""),
+            body_markdown="",  # description is intentionally never read (see module docstring)
+            status="CLOSED" if status_cat == "Done" else "OPEN",
+            labels=list(fields.get("labels") or []),
+            assignees=[assignee["emailAddress"]] if assignee.get("emailAddress") else [],
+        )
+
+    def status_category(self, issue_id: str) -> str | None:
+        """Return the raw Jira status category name (e.g. 'Done') or None."""
+        data = self._run_cli(
+            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+        )
+        if not isinstance(data, dict):
+            return None
+        return (((data.get("fields") or {}).get("status") or {}).get("statusCategory") or {}).get("name")
+
+    def labels(self, issue_id: str) -> set[str]:
+        data = self._run_cli(
+            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+        )
+        if not isinstance(data, dict):
+            return set()
+        return set((data.get("fields") or {}).get("labels") or [])
+
+    def current_assignee_email(self, issue_id: str) -> str | None:
+        data = self._run_cli(
+            [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+        )
+        if not isinstance(data, dict):
+            return None
+        return ((data.get("fields") or {}).get("assignee") or {}).get("emailAddress")
+
+    # ---- writes ------------------------------------------------------------
+
+    def create_issue(self, issue: CanonicalIssue) -> str:
+        argv = [
+            self.acli_bin,
+            "jira",
+            "workitem",
+            "create",
+            "--project",
+            self.project_key,
+            "--type",
+            "Task",
+            "--summary",
+            issue.title,
+        ]
+        if issue.labels:
+            argv += ["--labels", ",".join(sorted(set(issue.labels)))]
+        key = self._run_cli(argv, parse_json=False)
+        return str(key).strip()
+
+    def update_issue(self, issue_id: str, issue: CanonicalIssue) -> None:
+        """Full canonical update: reconcile labels and assignee only.
+
+        Description is never written. Status transitions require workflow
+        knowledge and are left to the Jira UI.
+        """
+        self.edit(
+            issue_id,
+            assignee=issue.assignees[0] if issue.assignees else None,
+            add_labels=issue.labels,
+        )
+
+    def edit(
+        self,
+        issue_id: str,
+        *,
+        assignee: str | None = None,
+        add_labels: list[str] | None = None,
+        remove_labels: list[str] | None = None,
+        dry_run: bool = False,
+    ) -> tuple[bool, str]:
+        """Apply a labels/assignee edit. Returns (ok, message). Never writes description."""
+        cmd = [self.acli_bin, "jira", "workitem", "edit", "--key", issue_id, "--yes"]
+        base_len = len(cmd)
+        if assignee:
+            cmd += ["--assignee", assignee]
+        if add_labels:
+            cmd += ["--labels", ",".join(sorted(set(add_labels)))]
+        if remove_labels:
+            cmd += ["--remove-labels", ",".join(sorted(set(remove_labels)))]
+
+        if len(cmd) == base_len:  # nothing to change beyond --key/--yes
+            return True, "no-op"
+        if dry_run:
+            return True, "dry-run: " + " ".join(cmd)
+
+        try:
+            self._run_cli(cmd, parse_json=False)
+        except AdapterError as exc:
+            return False, str(exc)[:400]
+        return True, "updated"
+
+    # ---- comments ----------------------------------------------------------
+
+    def list_comments(self, issue_id: str) -> list[dict]:
+        try:
+            data = self._run_cli(
+                [self.acli_bin, "jira", "workitem", "comment", "list", "--key", issue_id, "--json"],
+            )
+        except AdapterError:
+            return []
+        if isinstance(data, dict):
+            return data.get("comments", [])
+        return []
+
+    def upsert_sync_comment(
+        self, issue_id: str, body: str, *, dry_run: bool = False
+    ) -> tuple[bool, str]:
+        """Create or update the single marked sync comment in place.
+
+        Finds our comment by its leading marker line (matched on content, not
+        author, so it survives credential rotation). Never touches any other
+        comment or the description field.
+        """
+        existing = find_sync_comment(self.list_comments(issue_id))
+
+        if dry_run:
+            return True, f"dry-run: comment {'update' if existing else 'create'} on {issue_id}"
+
+        if existing:
+            cmd = [
+                self.acli_bin, "jira", "workitem", "comment", "update",
+                "--key", issue_id, "--id", existing["id"], "--body", body,
+            ]
+            verb = "updated"
+        else:
+            cmd = [
+                self.acli_bin, "jira", "workitem", "comment", "create",
+                "--key", issue_id, "--body", body,
+            ]
+            verb = "created"
+
+        try:
+            self._run_cli(cmd, parse_json=False)
+        except AdapterError as exc:
+            return False, str(exc)[:400]
+        return True, f"comment {verb}"
+
+
+def find_sync_comment(comments: list[dict]) -> dict | None:
+    """Return the existing sync comment (if any), identified by its marker line."""
+    for comment in comments:
+        body = comment.get("body") or ""
+        if body.lstrip().startswith(SYNC_COMMENT_MARKER):
+            return comment
+    return None
+
+
+def strip_sync_timestamp(body: str) -> str:
+    """Drop the leading marker/timestamp line so bodies compare for substantive equality."""
+    return re.sub(rf"^{re.escape(SYNC_COMMENT_MARKER)}.*$", "", body, count=1, flags=re.M).strip()
+
+
+def build_sync_comment(gh_items: list[dict]) -> str:
+    """Compose the terse, idempotent sync comment body for a set of linked GitHub items."""
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ordered = sorted(
+        gh_items,
+        key=lambda i: (0 if i.get("state") == "open" else 1, -_iso_to_epoch(i.get("updated_at"))),
+    )
+    primary = ordered[0]
+
+    linked_lines = []
+    for item in ordered:
+        kind = "PR" if "pull_request" in item else "Issue"
+        ms = (item.get("milestone") or {}).get("title") or "-"
+        linked_lines.append(
+            f"- {kind} #{item['number']} {item['html_url']} "
+            f"state={item.get('state')} milestone={ms} updated={item.get('updated_at', '')[:10]}"
+        )
+
+    header = (
+        f"{SYNC_COMMENT_MARKER} Last synced from GitHub: {ts}\n"
+        f"Primary source: {primary.get('html_url')}\n"
+        f"State: {primary.get('state')}"
+    )
+    if primary.get("milestone"):
+        header += f"  Milestone: {primary['milestone']['title']}"
+    return header + "\n\nLinked GitHub items:\n" + "\n".join(linked_lines)
+
+
+def _iso_to_epoch(ts: str | None) -> int:
+    if not ts:
+        return 0
+    try:
+        return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return 0

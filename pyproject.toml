@@ -1,0 +1,30 @@
+[project]
+name = "omni-sync"
+version = "0.1.0"
+description = "Unified CLI and sync harness across GitHub.com, GitHub Enterprise Server, GitLab, and Jira"
+authors = [
+    { name = "John Jediny", email = "person.one@agency.gov" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.7",
+    "rich>=13.7",
+]
+
+[project.scripts]
+omni-sync = "harness.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["harness"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-mock>=3.14",
+    "hypothesis>=6.100",
+]

@@ -1,0 +1,13 @@
+[tools]
+python = "3.12"
+uv = "latest"
+gh = "latest"
+glab = "latest"
+acli = "latest"
+
+[env]
+CLOUDGOV_GLAB_HOST = "workshop.cloud.gov"
+HELIX_GH_HOST = "github.helix.gsa.gov"
+GITHUB_PUBLIC_HOST = "github.com"
+JIRA_INSTANCE_URL = "https://gsa-standard.atlassian-us-gov-mod.net"
+NO_COLOR = "1"

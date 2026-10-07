@@ -1,0 +1,8 @@
+{
+  "title": "Migrate core auth service",
+  "body": "### Summary\nUpdate the OIDC endpoints.",
+  "state": "OPEN",
+  "labels": [{"name": "compliance:moderate"}, {"name": "auth"}],
+  "assignees": [{"login": "jdoe"}],
+  "number": 12
+}
