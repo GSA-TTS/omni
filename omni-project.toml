@@ -41,7 +41,7 @@ helix = "git@github.helix.gsa.gov:example-owner/omni.git"
 sync_labels     = true
 sync_assignee   = true
 sync_milestone  = true   # emitted as a Jira label: `milestone:PI-6-Iteration-6.1`
-sync_status     = false  # transitions require workflow knowledge -- off by default
+sync_status     = false  # true is rejected: transitions require workflow-specific mappings
 append_updates  = true   # post/update a dedicated Jira COMMENT (never the description
                          # field -- an earlier version wrote this into `description`
                          # and destroyed rich ADF formatting on ~82 real tickets)

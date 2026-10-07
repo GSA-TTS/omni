@@ -1,11 +1,11 @@
 ---
 name: omni-sync
 description: >-
-  Supported commands, provider CLI compatibility matrix, and known failures for
-  the omni-sync harness (unified issue create/diff/sync across GitHub.com,
-  GitHub Enterprise Server "Helix", GitLab on cloud.gov, and GSA FedRAMP Jira
-  via acli). Use when running omni-sync, choosing a --body-mode, interpreting
-  sync drift, or avoiding inputs that break a provider CLI.
+  Generate a consolidated open-issues.md file as first-class agent context
+  across GitHub.com, GitHub Enterprise Server "Helix", GitLab on cloud.gov,
+  and GSA FedRAMP Jira. Also covers issue create/diff/sync commands, provider
+  compatibility, body modes, and known failures. Use first when an agent needs
+  current authored or assigned issue context across providers.
 ---
 
 # omni-sync agent skill
@@ -14,6 +14,53 @@ description: >-
 adapters driven by a canonical model. All CLI calls use argument lists (never
 `shell=True`), so shell metacharacters in issue bodies are passed literally and
 are safe.
+
+## Primary Workflow: Build Agent Context
+
+Run this before planning or changing work when current cross-provider issue
+context is relevant:
+
+```sh
+mise exec -- uv run omni-sync board --output open-issues.md --body-limit 240
+```
+
+Treat `open-issues.md` as the single context artifact. It contains report time,
+filters, totals, provider-specific Mermaid boards, linked issue details, and
+provider failures. Read the entire file before selecting work; do not infer that
+an absent issue is out of scope when the corresponding provider failed.
+
+Interpret the exit status:
+
+- `0`: all selected providers were queried successfully.
+- `1`: the file was still written, but it contains partial results and explicit
+  provider errors. Surface those errors and either fix configuration or narrow
+  the query with `--target`.
+
+Use filters to reduce context instead of post-processing provider output:
+
+```sh
+# Assigned work only
+omni-sync board --relationship assigned
+
+# A roster user across provider-specific usernames
+omni-sync board --user person@agency.gov
+
+# Security work in GitHub.com and Jira
+omni-sync board --target gh-tts --target jira-mod \
+  --label security --search "token rotation"
+
+# Closed work for review
+omni-sync board --state closed --limit 25
+```
+
+Available filters: repeatable `--relationship authored|assigned`, `--user
+@me|email|username`, `--label`, and `--target`; plus `--state open|closed|all`,
+`--search`, `--limit` (maximum 100), `--body-limit`, and `--output`.
+
+Security boundary: `open-issues.md` is gitignored and may contain sensitive
+provider content. Do not commit it or send it outside the authorized boundary.
+The default `@me` query does not load `users.toml`; email filters load the local
+roster to translate provider usernames and fail closed when a mapping is absent.
 
 ## Supported commands
 
