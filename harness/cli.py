@@ -15,7 +15,7 @@ from harness.adapters.github import GitHubAdapter
 from harness.adapters.github_rest import GitHubRestAdapter
 from harness.adapters.gitlab import GitLabAdapter
 from harness.adapters.jira import JiraAdapter
-from harness.config import email_to_login_map, load_config
+from harness.config import load_config
 from harness.engine.gh_jira_sync import (
     build_jira_index,
     plan_backfill_github_from_jira,
@@ -24,16 +24,32 @@ from harness.engine.gh_jira_sync import (
 from harness.engine.mirror import GitMirror
 from harness.engine.preflight import check_github, check_gitlab, check_jira
 from harness.engine.reconciler import reconcile
-from harness.identity import IdentityMap
+from harness.identity import UserRoster
 from harness.models import CanonicalIssue
+from harness.workspace import (
+    LOCAL_ONLY,
+    config_path,
+    find_workspace,
+    missing_local_files,
+    template_for,
+)
 
 app = typer.Typer(help="Unified issue CLI across GitHub, GitHub Enterprise, GitLab, and Jira.")
 
-_IDENTITY_MAP = Path(__file__).resolve().parent.parent / "identity_map.toml"
+
+def _warn_missing_local(workspace: Path | None = None) -> None:
+    """Warn once if local-only config files are absent, pointing at `init`."""
+    missing = missing_local_files(workspace)
+    if missing:
+        ws = workspace or find_workspace()
+        typer.echo(
+            f"warning: missing in {ws}: {', '.join(missing)} — run `omni-sync init` to create from templates",
+            err=True,
+        )
 
 
 def _resolve_assignees(target: str, values: list[str]) -> list[str]:
-    """Translate assignee emails to the target host's usernames via identity_map.toml.
+    """Translate assignee emails to the target host's usernames via users.toml.
 
     A value that is already a username passes through. An email with a mapping
     becomes that host's username; an email with no mapping is dropped with a
@@ -41,16 +57,28 @@ def _resolve_assignees(target: str, values: list[str]) -> list[str]:
     """
     if not values:
         return []
-    identity = IdentityMap.load(_IDENTITY_MAP)
+    roster = UserRoster.load(config_path("users.toml"))
     resolved: list[str] = []
     for value in values:
-        username = identity.resolve_assignee(target, value)
+        username = roster.resolve_assignee(target, value)
         if username is None:
-            typer.echo(f"  (skipping assignee '{value}': no mapping for {target} in identity_map.toml)", err=True)
+            typer.echo(f"  (skipping assignee '{value}': no mapping for {target} in users.toml)", err=True)
             continue
         resolved.append(username)
     return resolved
 
+
+def _email_to_login_map(cfg: dict) -> dict[str, str]:
+    """Jira email -> GitHub login, derived from the users.toml roster.
+
+    Prefers github.com logins, falling back to Helix. Used by the
+    Jira -> GitHub assignee backfill.
+    """
+    roster = UserRoster.load(config_path("users.toml"))
+    out: dict[str, str] = {}
+    for login, email in roster.github_login_to_jira_email().items():
+        out.setdefault(email.lower(), login)
+    return out
 
 
 def _load_dotenv(path: Path | None = None) -> None:
@@ -127,7 +155,7 @@ def create(
     title: str,
     body: str,
     to: list[str] = typer.Option(..., "--to", help="Target systems: gh-tts, gh-helix, gl-cg, jira-mod"),
-    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via identity_map.toml) or username; repeatable"),
+    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via users.toml) or username; repeatable"),
 ) -> None:
     """Create the same issue across one or more target systems."""
     results: dict[str, str] = {}
@@ -216,12 +244,14 @@ def sync(
 gh_jira = typer.Typer(help="Config-driven GitHub<->Jira sync (GSA FedRAMP acli workflow).")
 app.add_typer(gh_jira, name="gh-jira")
 
-_DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "sync_config.toml"
+# Resolved from the workspace discovered relative to the CWD (see workspace.py),
+# so the CLI works when invoked from any directory in or above the checkout.
+_DEFAULT_CONFIG = config_path("omni-project.toml")
 
 
 @gh_jira.command("sync-jira-from-github")
 def sync_jira_from_github_cmd(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
     jira_key: str = typer.Option(None, "--jira-key", help="Only sync this key, e.g. FPDF-395"),
     repo: list[str] = typer.Option(None, "--repo", help="Limit to repo(s); defaults to config"),
     limit: int = typer.Option(0, "--limit", help="Cap processed tickets"),
@@ -267,7 +297,7 @@ def sync_jira_from_github_cmd(
 
 @gh_jira.command("backfill-github-from-jira")
 def backfill_github_from_jira_cmd(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
     jira_key: str = typer.Option(None, "--jira-key", help="Only process this key, e.g. FPDF-463"),
     repo: list[str] = typer.Option(None, "--repo", help="Limit to repo(s); defaults to config"),
     limit: int = typer.Option(0, "--limit", help="Cap processed items"),
@@ -296,7 +326,7 @@ def backfill_github_from_jira_cmd(
         typer.echo(f"FAILED: {exc}", err=True)
         raise typer.Exit(code=1)
     jira_index = build_jira_index(jira_issues if isinstance(jira_issues, list) else [])
-    email_to_login = email_to_login_map(cfg)
+    email_to_login = _email_to_login_map(cfg)
 
     plans: list[dict] = []
     for r in repos:
@@ -330,12 +360,12 @@ def backfill_github_from_jira_cmd(
 
 @app.command()
 def doctor(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
 ) -> None:
     """Verify provider CLI auth and config without mutating anything.
 
     Checks that gh/glab/acli are installed and authenticated for the hosts
-    this project targets, that sync_config.toml parses, and that the Jira
+    this project targets, that omni-project.toml parses, and that the Jira
     API token is present. Read-only.
     """
     import shutil
@@ -410,15 +440,20 @@ def doctor(
     bl_ok = cli_present("betterleaks")
     check("betterleaks installed", bl_ok, "" if bl_ok else "secret scanning unavailable; see mise.toml")
 
-    # --- config parses ---
+    # --- workspace + config ---
+    ws = find_workspace()
+    check(f"workspace found ({ws})", (ws / "omni-project.toml").exists(), "" if (ws / "omni-project.toml").exists() else "no omni-project.toml above CWD")
+    for name in missing_local_files(ws):
+        check(f"local file present ({name})", False, "run: omni-sync init")
+
     try:
         cfg = load_config(config)
-        check(f"config parses ({config.name})", True)
+        check(f"config parses + validates ({config.name})", True)
         repos = cfg.get("github", {}).get("repos", [])
         check("config: github.repos non-empty", bool(repos), f"{len(repos)} repo(s)")
         check("config: jira.project_key set", bool(cfg.get("jira", {}).get("project_key")))
     except SystemExit as exc:
-        check(f"config parses ({config.name})", False, str(exc))
+        check(f"config parses + validates ({config.name})", False, str(exc))
 
     # --- Jira token present (never printed) ---
     check("JIRA_API_TOKEN in env", bool(os.environ.get("JIRA_API_TOKEN")), "set in .env (gitignored)" if os.environ.get("JIRA_API_TOKEN") else "copy .env.example to .env")
@@ -439,7 +474,7 @@ def pr(
     body: str = typer.Option("", "--body", help="PR/MR description"),
     to: list[str] = typer.Option(..., "--to", help="Targets: gh-tts, gh-helix, gl-cg"),
     draft: bool = typer.Option(False, "--draft", help="Open as a draft"),
-    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via identity_map.toml) or username; repeatable"),
+    assignee: list[str] = typer.Option(None, "--assignee", help="Email (mapped per host via users.toml) or username; repeatable"),
 ) -> None:
     """Open the same pull/merge request across one or more GitHub/GitLab targets."""
     results: dict[str, str] = {}
@@ -461,7 +496,7 @@ def pr(
 
 @app.command()
 def preflight(
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
 ) -> None:
     """Check that each configured target exists and is writable (read-only).
 
@@ -504,7 +539,7 @@ def preflight(
 def mirror(
     ref: str = typer.Option("main", "--ref", help="Git ref/branch to push"),
     to: list[str] = typer.Option(None, "--to", help="Mirror targets from [mirror] config; defaults to all"),
-    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to sync_config.toml"),
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", help="Path to omni-project.toml"),
     dry_run: bool = typer.Option(True, "--dry-run/--apply", help="Preview (default) or push"),
     batch: bool = typer.Option(False, "--batch", help="Non-interactive: fail fast instead of prompting for SSH passphrase"),
 ) -> None:
@@ -512,13 +547,13 @@ def mirror(
 
     Auth works the same whether a remote is HTTPS (gh web session / credential
     helper) or SSH (agent/keychain) -- the command does not depend on either.
-    Remotes are read from the [mirror] table of sync_config.toml. One
+    Remotes are read from the [mirror] table of omni-project.toml. One
     unreachable remote is reported but does not abort the others.
     """
     cfg = load_config(config)
     remotes = cfg.get("mirror", {})
     if not remotes:
-        typer.echo("No [mirror] remotes configured in sync_config.toml", err=True)
+        typer.echo("No [mirror] remotes configured in omni-project.toml", err=True)
         raise typer.Exit(code=1)
 
     targets = to or sorted(remotes)
@@ -582,6 +617,43 @@ def bench(
     )
     typer.echo(render_matrix([op]))
     typer.echo(f"\nTotal CLI calls: {metrics.count} over {runs} run(s) = {calls_per_run}/run")
+
+
+@app.command()
+def init(
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files"),
+) -> None:
+    """Create the local-only config files (users.toml, .env) from templates.
+
+    Writes into the resolved workspace (searched upward from the CWD). Skips
+    files that already exist unless --force. The created files are gitignored
+    and must be filled in with real values.
+    """
+    import shutil
+
+    ws = find_workspace()
+    created, skipped, missing_template = [], [], []
+    for name in LOCAL_ONLY:
+        dest = ws / name
+        if dest.exists() and not force:
+            skipped.append(name)
+            continue
+        template = template_for(name)
+        if not template.exists():
+            missing_template.append(name)
+            continue
+        shutil.copyfile(template, dest)
+        created.append(name)
+
+    for name in created:
+        typer.echo(f"created {ws / name}")
+    for name in skipped:
+        typer.echo(f"skipped {name} (exists; use --force to overwrite)")
+    for name in missing_template:
+        typer.echo(f"no template for {name}", err=True)
+
+    if created:
+        typer.echo("\nFill in the created files with real values. They are gitignored.")
 
 
 def main() -> None:

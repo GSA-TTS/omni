@@ -1,7 +1,7 @@
 """Git mirroring: push the current repository's code to one or more remotes
 (github.com, GitHub Enterprise Server, GitLab) in a single invocation.
 
-Remotes are resolved from the [mirror] table of sync_config.toml. This wraps
+Remotes are resolved from the [mirror] table of omni-project.toml. This wraps
 `git remote`/`git push` as subprocess list calls (never shell=True) and
 reports per-remote results so one unreachable remote does not abort the rest.
 """

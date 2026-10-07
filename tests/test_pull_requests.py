@@ -35,10 +35,10 @@ class TestGitHubPR:
     def test_assignees_passed(self, mocker):
         run_mock = mocker.patch("subprocess.run", return_value=_ok("url\n"))
         GitHubAdapter("github.com", "o/r").create_pull_request(
-            "T", "B", base="main", head="h", assignees=["jjediny"]
+            "T", "B", base="main", head="h", assignees=["gh-login"]
         )
         argv = run_mock.call_args.args[0]
-        assert "--assignee" in argv and "jjediny" in argv
+        assert "--assignee" in argv and "gh-login" in argv
 
 
 class TestGitLabMR:

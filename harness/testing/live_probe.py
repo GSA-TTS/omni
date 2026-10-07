@@ -6,8 +6,8 @@ issues. It drives the actual gh/glab/acli adapters so the results reflect real
 provider + shell behavior, which is then curated into skills/.
 
 Usage:
-    uv run python -m harness.testing.live_probe gh-helix example-owner/omni
-    uv run python -m harness.testing.live_probe gl-cg gsa-tts-engineering/james-testing
+    uv run python -m harness.testing.live_probe gh-helix <owner>/<repo>
+    uv run python -m harness.testing.live_probe gl-cg <group>/<project>
 """
 from __future__ import annotations
 

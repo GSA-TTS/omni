@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GSA-TTS/omni/schema/omni-project.schema.json",
+  "title": "omni-project configuration",
+  "description": "Committed, PII-free project config for omni-sync. Versioned via schema_version for forward evolution.",
+  "type": "object",
+  "required": ["schema_version", "jira", "github"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Config schema version. Bump when the shape changes incompatibly.",
+      "const": 1
+    },
+    "jira": {
+      "type": "object",
+      "required": ["project_key"],
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {"type": "string", "format": "uri"},
+        "project_key": {"type": "string", "minLength": 1},
+        "acli_bin": {"type": "string", "minLength": 1}
+      }
+    },
+    "gitlab": {
+      "type": "object",
+      "description": "GitLab (cloud.gov) project settings.",
+      "additionalProperties": false,
+      "properties": {
+        "host": {"type": "string", "minLength": 1},
+        "project_key": {"type": "string", "minLength": 1},
+        "project": {"type": "string", "minLength": 1}
+      }
+    },
+    "github": {
+      "type": "object",
+      "required": ["org", "repos"],
+      "additionalProperties": false,
+      "properties": {
+        "org": {"type": "string", "minLength": 1},
+        "repos": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1
+        },
+        "project_number": {"type": "integer"}
+      }
+    },
+    "mirror": {
+      "type": "object",
+      "description": "name -> git remote URL for `omni-sync mirror`.",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sync_labels": {"type": "boolean"},
+        "sync_assignee": {"type": "boolean"},
+        "sync_milestone": {"type": "boolean"},
+        "sync_status": {"type": "boolean"},
+        "append_updates": {"type": "boolean"},
+        "milestone_label_prefix": {"type": "string"},
+        "jira_skip_status_categories": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "description": "GitHub label -> Jira label. May be overridden by the gitignored users/labels files.",
+      "additionalProperties": {"type": "string"}
+    },
+    "always_apply": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "jira_labels": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

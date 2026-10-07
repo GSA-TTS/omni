@@ -3,7 +3,7 @@ name = "omni-sync"
 version = "0.1.0"
 description = "Unified CLI and sync harness across GitHub.com, GitHub Enterprise Server, GitLab, and Jira"
 authors = [
-    { name = "John Jediny", email = "person.one@agency.gov" }
+    { name = "omni-sync contributors" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -27,4 +27,5 @@ dev = [
     "pytest>=8.2",
     "pytest-mock>=3.14",
     "hypothesis>=6.100",
+    "jsonschema>=4.21",
 ]

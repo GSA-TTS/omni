@@ -78,13 +78,12 @@ gh auth login --hostname github.helix.gsa.gov
 
 > **Helix SSO login vs. username.** On `github.helix.gsa.gov` you sign in
 > through SSO using the `_gsagov`-suffixed form of your handle (e.g.
-> `ghes-login-1`) to reach the correct SSO endpoint. That suffixed value
-> is the SAML external UID, **not** your GitHub login. Your actual GitHub login
-> on Helix (what `gh api user --jq .login` returns, and what `--assignee`
-> expects) is the un-suffixed form (`johnhjediny`). The identity map
-> ([identity_map.toml](identity_map.toml)) therefore stores the **login**, not
-> the SSO form, since assignments resolve against the login — use the `_gsagov`
-> value only at the SSO login prompt.
+> `<login>_gsagov`) to reach the correct SSO endpoint. That suffixed value is
+> the SAML external UID, **not** your GitHub login. Your actual GitHub login on
+> Helix (what `gh api user --jq .login` returns, and what `--assignee` expects)
+> is the un-suffixed form (`<login>`). The identity map therefore stores the
+> **login**, not the SSO form, since assignments resolve against the login —
+> use the `_gsagov` value only at the SSO login prompt.
 
 …or, if you already have SSH keys configured, authenticate the API with a token
 while keeping SSH for Git operations:
@@ -144,31 +143,51 @@ export JIRA_MOD_PROJECT=PROJ
 Each underlying CLI (`gh`, `glab`, `jira-cli`) must already be authenticated
 against its respective host.
 
-## Identity map (cross-host assignees)
+## Local config files (PII — gitignored)
+
+Team identities are **not** committed (phishing/PII concern). The project is
+configured by two files:
+
+- **`omni-project.toml`** — committed, PII-free project config (Jira/GitHub/
+  GitLab targets, mirror remotes, sync flags, label map). Validated against
+  [schema/omni-project.schema.json](schema/omni-project.schema.json) via a
+  top-level `schema_version` for forward evolution.
+- **`users.toml`** — gitignored team roster (emails → per-host usernames). The
+  GitHub-login → Jira-email developer map is derived from it.
+
+Copy the templates and fill in real values (or run `omni-sync init`):
+
+```sh
+cp users.toml.example users.toml       # [users."<email>"] roster
+cp .env.example       .env             # tokens (JIRA_API_TOKEN, GITLAB_TOKEN)
+```
+
+The CLI searches upward from the current directory for `omni-project.toml` /
+`users.toml` / `.env` and warns (pointing at `omni-sync init`) if the
+local-only ones are missing, so it works when invoked from any directory in or
+above the checkout.
+
+## Identity roster (cross-host assignees)
 
 `--assignee` on `create` and `pr` accepts either a provider username or an
 **email address**. Emails are the pivot field: the same person resolves to the
-right username on each host via [identity_map.toml](identity_map.toml), one
-table per host base URL:
+right username on each host via `users.toml` (gitignored; see
+[users.toml.example](users.toml.example)), one table per person keyed on email:
 
 ```toml
-["https://github.com/GSA-TTS"]
-"person.one@agency.gov" = "jjediny"
-
-["https://github.helix.gsa.gov/"]
-"person.one@agency.gov" = "johnhjediny"   # the GitHub login, NOT the _gsagov SSO form
-
-["https://workshop.cloud.gov/"]
-"person.one@agency.gov" = "john.jediny"
+[users."person.one@agency.gov"]
+gh     = "gh-login-1"        # github.com (GSA-TTS)
+helix  = "ghes-login-1"      # github.helix.gsa.gov — the login, NOT the _gsagov SSO form
+gitlab = "gitlab-login-1"    # workshop.cloud.gov
 ```
 
-So `--assignee person.one@agency.gov --to gh-helix` assigns `johnhjediny`, while
-the same flag `--to gl-cg` assigns `john.jediny`. A plain username passes
-through unchanged; an email with no mapping for that host is skipped with a
-warning rather than failing the whole command.
+So `--assignee person.one@agency.gov --to gh-helix` assigns `ghes-login-1`,
+while the same flag `--to gl-cg` assigns `gitlab-login-1`. A plain username
+passes through unchanged; an email with no mapping for that host is skipped
+with a warning rather than failing the whole command.
 
-> Note the Helix value is the login (`johnhjediny`), not the `_gsagov` SSO
-> handle — see the Helix SSO note under Authentication.
+> Note the Helix value is the login, not the `_gsagov` SSO handle — see the
+> Helix SSO note under Authentication.
 
 ## Usage
 
@@ -200,7 +219,7 @@ uv run omni-sync sync gh-helix 4 gl-cg 88 --direction left-to-right --apply
 
 A second, battle-tested sync flow (transposed from the GSA-TTS petrified-forest
 tooling) drives GitHub ↔ GSA GovCloud Jira (project `FPDF`) via the Atlassian
-CLI (`acli`), configured entirely through [sync_config.toml](sync_config.toml).
+CLI (`acli`), configured entirely through [omni-project.toml](omni-project.toml).
 
 Two deliberately separate one-directional flows avoid split-brain oscillation:
 
@@ -225,7 +244,7 @@ Key safety invariants carried over from the source tooling:
   labels are ever removed — human-set labels are never touched.
 - **Backfill is fail-closed**: it only sets a GitHub assignee when GitHub has
   none, the Jira ticket is non-Done and assigned, and the Jira assignee maps to a
-  known GitHub login in `[developers]`. Every other case is reported, not guessed.
+  known GitHub login (derived from `users.toml`). Every other case is reported, not guessed.
 - Reads GitHub via REST (`gh api --paginate`), leaving the GraphQL project quota
   untouched.
 
@@ -233,8 +252,10 @@ Key safety invariants carried over from the source tooling:
 
 ```
 harness/
-├── cli.py                     # Entry point: create, sync, diff, gh-jira
-├── config.py                  # sync_config.toml loader + label/assignee mapping
+├── cli.py                     # Entry point: create, sync, diff, gh-jira, mirror, doctor, preflight, bench, init
+├── config.py                  # omni-project.toml loader + schema validation + label/assignee mapping
+├── workspace.py               # Discover config files upward from CWD
+├── identity.py                # users.toml roster (email-pivoted cross-host lookups)
 ├── models.py                  # CanonicalIssue, FieldDelta, DiffResult, sync anchor helpers
 ├── transformers/
 │   ├── markdown_jira.py       # GFM <-> Atlassian Document Format

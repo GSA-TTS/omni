@@ -1,0 +1,24 @@
+# users.toml — team roster (PII; gitignored). The ONLY place personal
+# emails/usernames live. Copy and fill in:  cp users.toml.example users.toml
+# (or run `omni-sync init`).
+#
+# One table per developer, keyed on their email (the pivot field). Each lists
+# that person's username per host. From this single roster the harness derives:
+#   * --assignee <email> -> the right username per host (create / pr)
+#   * GitHub login -> Jira email (the gh-jira sync assignee translation)
+#
+# Omit a field a person doesn't have. Keep this file OUT of the repo.
+#
+# Helix note: store the GitHub LOGIN (what --assignee / `gh api user` use),
+# NOT the SSO handle. You sign in via SSO as "<login>_gsagov" (SAML external
+# UID) but your login omits the suffix. See README Authentication.
+
+[users."person.one@agency.gov"]
+gh     = "gh-login-1"        # github.com (GSA-TTS)
+helix  = "ghes-login-1"      # github.helix.gsa.gov
+gitlab = "gitlab-login-1"    # workshop.cloud.gov
+
+[users."person.two@agency.gov"]
+gh     = "gh-login-2"
+helix  = "ghes-login-2"
+gitlab = "gitlab-login-2"

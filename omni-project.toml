@@ -1,0 +1,55 @@
+# omni-project.toml — single project configuration for omni-sync.
+#
+# Validated against schema/omni-project.schema.json (see `schema_version`).
+# This file is COMMITTED and public: it holds no PII. The team roster lives
+# in the gitignored users.toml (copy users.toml.example). Tokens live in .env.
+#
+# The CLI discovers this file by searching upward from the current directory,
+# so you can run omni-sync from anywhere in or above the checkout.
+
+schema_version = 1
+
+[jira]
+project_key = "FPDF"
+
+[gitlab]
+project_key = "FPDF"
+
+[github]
+org = "GSA-TTS"
+# First entry is the primary/default repo when creating new stubs.
+repos = [
+  "TTSE-petrified-forest-pipeline",
+  "TTSE-petrified-forest",
+]
+project_number = 101
+
+# Git mirror remotes for `omni-sync mirror`. name -> git remote URL.
+# Either transport works and does not affect the command: HTTPS reuses the
+# `gh` credential helper, SSH uses your agent/keychain.
+[mirror]
+origin = "git@github.com:GSA-TTS/omni.git"
+helix = "git@github.helix.gsa.gov:example-owner/omni.git"
+
+[sync]
+sync_labels     = true
+sync_assignee   = true
+sync_milestone  = true   # emitted as a Jira label: `milestone:PI-6-Iteration-6.1`
+sync_status     = false  # transitions require workflow knowledge -- off by default
+append_updates  = true   # post/update a dedicated Jira COMMENT (never the description
+                         # field -- an earlier version wrote this into `description`
+                         # and destroyed rich ADF formatting on ~82 real tickets)
+milestone_label_prefix = "milestone:"
+jira_skip_status_categories = ["Done"]
+
+# GitHub label -> Jira label. Unlisted labels pass through sanitized (Jira
+# labels cannot contain spaces -> hyphens).
+[labels]
+"bug"           = "bug"
+"enhancement"   = "enhancement"
+"documentation" = "documentation"
+"jira-migrated" = "github-sync"
+
+# Labels stamped on every synced Jira ticket for traceability.
+[always_apply]
+jira_labels = ["github-sync"]

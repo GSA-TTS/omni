@@ -10,6 +10,7 @@ from harness.config import (
 
 _CFG = tomllib.loads(
     """
+schema_version = 1
 [jira]
 project_key = "FPDF"
 [github]
@@ -18,7 +19,7 @@ repos = ["r1"]
 [sync]
 milestone_label_prefix = "milestone:"
 [developers]
-gh-login-1 = "person.one@agency.gov"
+devuser = "dev.user@agency.gov"
 [labels]
 "priority:high" = "priority-high"
 [always_apply]
@@ -44,7 +45,7 @@ def test_map_labels_passes_through_unlisted():
 
 
 def test_map_assignee_case_insensitive():
-    assert map_assignee(["jjediny"], _CFG) == "person.one@agency.gov"
+    assert map_assignee(["devuser"], _CFG) == "dev.user@agency.gov"
 
 
 def test_map_assignee_returns_none_when_unmapped():
@@ -53,7 +54,7 @@ def test_map_assignee_returns_none_when_unmapped():
 
 def test_email_to_login_map_inverts_developers():
     inv = email_to_login_map(_CFG)
-    assert inv["person.one@agency.gov"] == "gh-login-1"
+    assert inv["dev.user@agency.gov"] == "devuser"
 
 
 def test_milestone_label_encodes_prefix_and_sanitizes():

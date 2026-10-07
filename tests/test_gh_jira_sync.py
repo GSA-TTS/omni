@@ -8,6 +8,7 @@ from harness.engine.gh_jira_sync import (
 
 _CFG = tomllib.loads(
     """
+schema_version = 1
 [jira]
 project_key = "FPDF"
 acli_bin = "acli"
@@ -22,7 +23,7 @@ append_updates = true
 milestone_label_prefix = "milestone:"
 jira_skip_status_categories = ["Done"]
 [developers]
-gh-login-1 = "person.one@agency.gov"
+devuser = "dev.user@agency.gov"
 [labels]
 "bug" = "bug"
 [always_apply]
@@ -106,8 +107,8 @@ def test_removes_only_stale_managed_milestone_labels():
 
 def test_assignee_mapped_from_github_login():
     jira = FakeJira(labels={"bug", "github-sync"}, assignee=None)
-    sync_jira_from_github([_gh_item(labels=["bug"], assignees=["gh-login-1"])], jira, "FPDF-1", _CFG, dry_run=False)
-    assert jira.edits[0]["assignee"] == "person.one@agency.gov"
+    sync_jira_from_github([_gh_item(labels=["bug"], assignees=["devuser"])], jira, "FPDF-1", _CFG, dry_run=False)
+    assert jira.edits[0]["assignee"] == "dev.user@agency.gov"
 
 
 def test_no_changes_when_already_in_sync():
@@ -118,7 +119,7 @@ def test_no_changes_when_already_in_sync():
 
 
 class TestBackfill:
-    def _index(self, status="In Progress", email="person.one@agency.gov"):
+    def _index(self, status="In Progress", email="dev.user@agency.gov"):
         return build_jira_index(
             [
                 {
@@ -133,27 +134,27 @@ class TestBackfill:
 
     def test_backfills_when_github_unassigned(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(), {"person.one@agency.gov": "gh-login-1"}
+            _gh_item(assignees=[]), "FPDF-1", self._index(), {"dev.user@agency.gov": "devuser"}
         )
         assert plan["action"] == "backfill"
-        assert plan["login"] == "gh-login-1"
+        assert plan["login"] == "devuser"
 
     def test_skips_when_github_already_assigned(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=["someone"]), "FPDF-1", self._index(), {"person.one@agency.gov": "gh-login-1"}
+            _gh_item(assignees=["someone"]), "FPDF-1", self._index(), {"dev.user@agency.gov": "devuser"}
         )
         assert plan["action"] == "skip"
         assert "already has an assignee" in plan["reason"]
 
     def test_skips_done_jira(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(status="Done"), {"person.one@agency.gov": "gh-login-1"}
+            _gh_item(assignees=[]), "FPDF-1", self._index(status="Done"), {"dev.user@agency.gov": "devuser"}
         )
         assert plan["action"] == "skip"
 
     def test_skips_unmapped_jira_assignee(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(email="unknown@gsa.gov"), {"person.one@agency.gov": "gh-login-1"}
+            _gh_item(assignees=[]), "FPDF-1", self._index(email="unknown@agency.gov"), {"dev.user@agency.gov": "devuser"}
         )
         assert plan["action"] == "skip"
         assert "no GitHub login" in plan["reason"]

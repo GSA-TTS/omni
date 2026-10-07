@@ -19,7 +19,7 @@ _WORKITEM = {
     "fields": {
         "summary": "Migrate core auth service",
         "status": {"statusCategory": {"name": "In Progress"}},
-        "assignee": {"emailAddress": "dev.user@agency.gov", "displayName": "J Doe"},
+        "assignee": {"emailAddress": "dev.user@agency.gov", "displayName": "Dev User"},
         "labels": ["bug", "milestone:PI-6-Iteration-6.1"],
     }
 }

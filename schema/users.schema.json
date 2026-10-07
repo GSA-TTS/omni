@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GSA-TTS/omni/schema/users.schema.json",
+  "title": "omni-sync users roster",
+  "description": "Gitignored team roster (PII). One table per person keyed on email; each lists that person's username per host. Never committed.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "users": {
+      "type": "object",
+      "description": "Map of email address -> per-host usernames.",
+      "propertyNames": {
+        "format": "email",
+        "description": "Email address is the pivot key for a person."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "A person's usernames per host. Omit a host the person lacks.",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "gh": {
+            "type": "string",
+            "minLength": 1,
+            "description": "github.com login."
+          },
+          "helix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "github.helix.gsa.gov LOGIN (not the _gsagov SSO handle)."
+          },
+          "gitlab": {
+            "type": "string",
+            "minLength": 1,
+            "description": "workshop.cloud.gov (GitLab) username."
+          }
+        }
+      }
+    }
+  }
+}

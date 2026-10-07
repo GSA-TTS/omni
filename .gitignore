@@ -9,3 +9,8 @@ build/
 .DS_Store
 .env
 token.txt
+
+# Local-only PII roster (keep real emails/usernames out of the repo)
+users.toml
+
+.vscode/
