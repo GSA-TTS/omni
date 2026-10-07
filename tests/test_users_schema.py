@@ -32,7 +32,39 @@ def test_non_string_username_rejected():
         _validate_users(data, _EXAMPLE)
 
 
+def test_empty_username_placeholder_allowed():
+    data = tomllib.loads('[users."a@agency.gov"]\ngh = "a"\nhelix = ""\n')
+    _validate_users(data, _EXAMPLE)
+
+
 def test_empty_entry_rejected():
     data = tomllib.loads('[users."a@agency.gov"]\n')
+    with pytest.raises(SystemExit, match="users.toml invalid"):
+        _validate_users(data, _EXAMPLE)
+
+
+def test_group_with_known_members_passes():
+    data = tomllib.loads(
+        '[users."a@agency.gov"]\ngh = "a"\n'
+        '[groups."example-team"]\nmembers = ["a@agency.gov"]\n'
+        'github_org = "example-org"\ngithub_team = "example-team"\n'
+    )
+    _validate_users(data, _EXAMPLE)
+
+
+def test_group_with_unknown_member_rejected():
+    data = tomllib.loads(
+        '[users."a@agency.gov"]\ngh = "a"\n'
+        '[groups."example-team"]\nmembers = ["missing@agency.gov"]\n'
+    )
+    with pytest.raises(SystemExit, match="references unknown users"):
+        _validate_users(data, _EXAMPLE)
+
+
+def test_group_slug_must_be_stable_kebab_case():
+    data = tomllib.loads(
+        '[users."a@agency.gov"]\ngh = "a"\n'
+        '[groups."Example Team"]\nmembers = ["a@agency.gov"]\n'
+    )
     with pytest.raises(SystemExit, match="users.toml invalid"):
         _validate_users(data, _EXAMPLE)

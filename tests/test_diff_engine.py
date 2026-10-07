@@ -37,6 +37,20 @@ def test_label_order_does_not_trigger_diff():
     assert not result.has_changes
 
 
+def test_additive_label_diff_ignores_target_only_labels():
+    left = _issue(labels=["bug"])
+    right = _issue(labels=["bug", "human-owned"])
+    result = compute_diff(left, right, label_mode="additive", label_source="left")
+    assert not result.has_changes
+
+
+def test_additive_label_diff_detects_missing_source_labels():
+    left = _issue(labels=["bug", "area:sync"])
+    right = _issue(labels=["bug", "human-owned"])
+    result = compute_diff(left, right, label_mode="additive", label_source="left")
+    assert any(d.field == "labels" for d in result.deltas)
+
+
 def test_anchor_footer_stripped_before_body_diff():
     left = _issue(body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:abc -->\n<!-- links: gh-tts:12 -->")
     right = _issue(body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:xyz -->\n<!-- links: gl-cg:88 -->")

@@ -68,9 +68,11 @@ def sync_jira_from_github(
     existing_labels = jira.labels(key)
     add_labels = sorted(set(desired_labels) - existing_labels) if desired_labels else []
     ms_prefix = cfg["sync"].get("milestone_label_prefix", "milestone:")
-    remove_labels = [
-        label for label in existing_labels if label.startswith(ms_prefix) and label not in desired_labels
-    ]
+    remove_labels = []
+    if cfg["sync"].get("sync_milestone", True):
+        remove_labels = [
+            label for label in existing_labels if label.startswith(ms_prefix) and label not in desired_labels
+        ]
 
     assignee = None
     if cfg["sync"].get("sync_assignee", True):

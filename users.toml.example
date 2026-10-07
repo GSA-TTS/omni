@@ -6,8 +6,10 @@
 # that person's username per host. From this single roster the harness derives:
 #   * --assignee <email> -> the right username per host (create / pr)
 #   * GitHub login -> Jira email (the gh-jira sync assignee translation)
+#   * team membership -> future GitHub provisioning and CODEOWNERS generation
 #
-# Omit a field a person doesn't have. Keep this file OUT of the repo.
+# Omit a field a person doesn't have, or use an empty string as a placeholder
+# while the username is unknown. Keep this file OUT of the repo.
 #
 # Helix note: store the GitHub LOGIN (what --assignee / `gh api user` use),
 # NOT the SSO handle. You sign in via SSO as "<login>_gsagov" (SAML external
@@ -22,3 +24,11 @@ gitlab = "gitlab-login-1"    # workshop.cloud.gov
 gh     = "gh-login-2"
 helix  = "ghes-login-2"
 gitlab = "gitlab-login-2"
+
+[groups."example-team"]
+github_org = "example-org"
+github_team = "example-team"
+members = [
+  "person.one@agency.gov",
+  "person.two@agency.gov",
+]

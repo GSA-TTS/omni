@@ -13,7 +13,7 @@ from typing import Literal
 
 from harness.adapters.base import BaseIssueAdapter, BodyMode
 from harness.engine.diff import compute_diff
-from harness.models import CanonicalIssue, DiffResult, strip_anchor
+from harness.models import CanonicalIssue, DiffResult, FieldDelta, strip_anchor
 
 Direction = Literal["left-to-right", "right-to-left"]
 
@@ -47,15 +47,24 @@ def reconcile(
     """
     left_issue = left_adapter.get_issue(left_id)
     right_issue = right_adapter.get_issue(right_id)
-    diff = compute_diff(left_issue, right_issue)
+    diff = compute_diff(
+        left_issue,
+        right_issue,
+        label_mode="additive" if direction else "exact",
+        label_source="left" if direction != "right-to-left" else "right",
+    )
 
     if dry_run or direction is None or not diff.has_changes:
         return ReconcileResult(diff=diff, applied=False, direction=direction, body_mode=body_mode)
 
     if direction == "left-to-right":
-        _apply_patch(right_adapter, right_id, source=left_issue, target=right_issue, body_mode=body_mode)
+        _apply_patch(
+            right_adapter, right_id, source=left_issue, target=right_issue, diff=diff, body_mode=body_mode
+        )
     else:
-        _apply_patch(left_adapter, left_id, source=right_issue, target=left_issue, body_mode=body_mode)
+        _apply_patch(
+            left_adapter, left_id, source=right_issue, target=left_issue, diff=diff, body_mode=body_mode
+        )
 
     return ReconcileResult(diff=diff, applied=True, direction=direction, body_mode=body_mode)
 
@@ -65,6 +74,7 @@ def _apply_patch(
     target_id: str,
     source: CanonicalIssue,
     target: CanonicalIssue,
+    diff: DiffResult,
     body_mode: BodyMode = "replace",
 ) -> None:
     """Write the source's content onto the target, honoring body_mode.
@@ -73,8 +83,25 @@ def _apply_patch(
     the target's own description -- the safest option when the target body is
     human-authored and must not be overwritten.
     """
+    labels = sorted(set(source.labels) | set(target.labels))
     if body_mode == "comment":
-        adapter.add_comment(target_id, strip_anchor(source.body_markdown))
+        body_changed = _has_delta(diff.deltas, "body_markdown")
+        non_body_changed = any(delta.field != "body_markdown" for delta in diff.deltas)
+        if body_changed:
+            adapter.add_comment(target_id, strip_anchor(source.body_markdown))
+        if not non_body_changed:
+            return
+        patched = CanonicalIssue(
+            title=source.title,
+            body_markdown=target.body_markdown,
+            status=source.status,
+            priority=source.priority,
+            labels=labels,
+            assignees=list(target.assignees),
+            uuid=target.uuid,
+            sync_metadata=dict(target.sync_metadata),
+        )
+        adapter.update_issue(target_id, patched)
         return
 
     if body_mode == "append":
@@ -89,8 +116,13 @@ def _apply_patch(
         body_markdown=new_body,
         status=source.status,
         priority=source.priority,
-        labels=list(source.labels),
+        labels=labels,
         assignees=list(target.assignees),
         uuid=target.uuid,
-        sync_metadata=dict(target.sync_metadata),    )
+        sync_metadata=dict(target.sync_metadata),
+    )
     adapter.update_issue(target_id, patched)
+
+
+def _has_delta(deltas: list[FieldDelta], field: str) -> bool:
+    return any(delta.field == field for delta in deltas)

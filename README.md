@@ -152,8 +152,10 @@ configured by two files:
   GitLab targets, mirror remotes, sync flags, label map). Validated against
   [schema/omni-project.schema.json](schema/omni-project.schema.json) via a
   top-level `schema_version` for forward evolution.
-- **`users.toml`** — gitignored team roster (emails → per-host usernames). The
-  GitHub-login → Jira-email developer map is derived from it.
+- **`users.toml`** — gitignored team roster (emails -> per-host usernames and
+  group membership). The GitHub-login -> Jira-email developer map is derived
+  from it. Groups provide metadata for future GitHub team provisioning and
+  CODEOWNERS generation.
 
 Copy the templates and fill in real values (or run `omni-sync init`):
 
@@ -179,12 +181,20 @@ right username on each host via `users.toml` (gitignored; see
 gh     = "gh-login-1"        # github.com (GSA-TTS)
 helix  = "ghes-login-1"      # github.helix.gsa.gov — the login, NOT the _gsagov SSO form
 gitlab = "gitlab-login-1"    # workshop.cloud.gov
+
+[groups."example-team"]
+github_org = "example-org"
+github_team = "example-team"
+members = ["person.one@agency.gov"]
 ```
 
 So `--assignee person.one@agency.gov --to gh-helix` assigns `ghes-login-1`,
 while the same flag `--to gl-cg` assigns `gitlab-login-1`. A plain username
 passes through unchanged; an email with no mapping for that host is skipped
 with a warning rather than failing the whole command.
+
+Group members must reference email keys declared under `[users]`. Host fields
+may be omitted or set to an empty string while a username is not yet known.
 
 > Note the Helix value is the login, not the `_gsagov` SSO handle — see the
 > Helix SSO note under Authentication.
