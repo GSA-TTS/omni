@@ -112,3 +112,12 @@ def _validate_users(data: dict, source: Path) -> None:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:  # pragma: no cover - exercised when installed
         sys.exit(f"users.toml invalid in {source}: {exc.message}")
+
+    users = {email.lower() for email in data.get("users", {})}
+    for group, entry in data.get("groups", {}).items():
+        unknown = sorted(email for email in entry["members"] if email.lower() not in users)
+        if unknown:
+            sys.exit(
+                f"users.toml invalid in {source}: group {group!r} references unknown users: "
+                f"{', '.join(unknown)}"
+            )

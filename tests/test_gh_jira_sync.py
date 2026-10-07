@@ -105,6 +105,14 @@ def test_removes_only_stale_managed_milestone_labels():
     assert "human-label" not in removed
 
 
+def test_disabled_milestone_sync_preserves_existing_milestone_labels():
+    cfg = {**_CFG, "sync": {**_CFG["sync"], "sync_milestone": False, "append_updates": False}}
+    jira = FakeJira(labels={"milestone:OLD", "bug", "github-sync"})
+    result = sync_jira_from_github([_gh_item(labels=["bug"])], jira, "FPDF-1", cfg, dry_run=False)
+    assert result["actions"] == ["no changes"]
+    assert jira.edits == []
+
+
 def test_assignee_mapped_from_github_login():
     jira = FakeJira(labels={"bug", "github-sync"}, assignee=None)
     sync_jira_from_github([_gh_item(labels=["bug"], assignees=["devuser"])], jira, "FPDF-1", _CFG, dry_run=False)
