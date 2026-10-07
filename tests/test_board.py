@@ -13,12 +13,28 @@ def _completed(data) -> subprocess.CompletedProcess:
 
 
 def test_github_list_combines_authored_and_assigned_without_duplicates(mocker):
-    authored = [{"number": 2, "title": "Two", "body": "B", "labels": [], "url": "https://host/o/r/issues/2"}]
+    authored = [
+        {
+            "number": 2,
+            "title": "Two",
+            "body": "B",
+            "labels": [],
+            "url": "https://host/o/r/issues/2",
+        }
+    ]
     assigned = [
         authored[0],
-        {"number": 1, "title": "One", "body": "A", "labels": [{"name": "bug"}], "url": "https://host/o/r/issues/1"},
+        {
+            "number": 1,
+            "title": "One",
+            "body": "A",
+            "labels": [{"name": "bug"}],
+            "url": "https://host/o/r/issues/1",
+        },
     ]
-    run = mocker.patch("subprocess.run", side_effect=[_completed(authored), _completed(assigned)])
+    run = mocker.patch(
+        "subprocess.run", side_effect=[_completed(authored), _completed(assigned)]
+    )
 
     query = IssueQuery(limit=25)
     issues = GitHubAdapter("host", "o/r").list_issues(query)
@@ -31,20 +47,34 @@ def test_github_list_combines_authored_and_assigned_without_duplicates(mocker):
 
 def test_github_list_propagates_user_state_labels_and_search(mocker):
     run = mocker.patch("subprocess.run", return_value=_completed([]))
-    query = IssueQuery(("assigned",), ("other-user",), "closed", ("bug", "risk"), "token refresh", 15)
+    query = IssueQuery(
+        ("assigned",), ("other-user",), "closed", ("bug", "risk"), "token refresh", 15
+    )
 
     GitHubAdapter("host", "o/r").list_issues(query)
 
     argv = run.call_args.args[0]
-    assert ["--state", "closed"] == argv[argv.index("--state"):argv.index("--state") + 2]
-    assert ["--assignee", "other-user"] == argv[argv.index("--assignee"):argv.index("--assignee") + 2]
+    assert ["--state", "closed"] == argv[
+        argv.index("--state") : argv.index("--state") + 2
+    ]
+    assert ["--assignee", "other-user"] == argv[
+        argv.index("--assignee") : argv.index("--assignee") + 2
+    ]
     assert argv.count("--label") == 2
-    assert ["--search", "token refresh"] == argv[argv.index("--search"):]
+    assert ["--search", "token refresh"] == argv[argv.index("--search") :]
 
 
 def test_gitlab_list_uses_current_user_scopes_and_encoded_project(mocker):
-    item = {"iid": 3, "title": "Three", "description": "Body", "labels": ["security"], "web_url": "https://gl/g/r/-/issues/3"}
-    run = mocker.patch("subprocess.run", side_effect=[_completed([item]), _completed([item])])
+    item = {
+        "iid": 3,
+        "title": "Three",
+        "description": "Body",
+        "labels": ["security"],
+        "web_url": "https://gl/g/r/-/issues/3",
+    }
+    run = mocker.patch(
+        "subprocess.run", side_effect=[_completed([item]), _completed([item])]
+    )
 
     issues = GitLabAdapter("gl", "group/repo").list_issues(IssueQuery(limit=10))
 
@@ -56,7 +86,9 @@ def test_gitlab_list_uses_current_user_scopes_and_encoded_project(mocker):
 
 def test_gitlab_list_uses_named_user_and_filters(mocker):
     run = mocker.patch("subprocess.run", return_value=_completed([]))
-    query = IssueQuery(("authored",), ("other-user",), "all", ("bug", "risk"), "token refresh", 15)
+    query = IssueQuery(
+        ("authored",), ("other-user",), "all", ("bug", "risk"), "token refresh", 15
+    )
 
     GitLabAdapter("gl", "group/repo").list_issues(query)
 
@@ -73,14 +105,21 @@ def test_jira_list_uses_current_user_jql_and_flattens_adf(mocker):
             "key": "TEST-2",
             "fields": {
                 "summary": "Jira issue",
-                "description": {"type": "doc", "content": [{"type": "paragraph", "content": [{"text": "ADF body"}]}]},
+                "description": {
+                    "type": "doc",
+                    "content": [
+                        {"type": "paragraph", "content": [{"text": "ADF body"}]}
+                    ],
+                },
                 "labels": ["risk"],
             },
         }
     ]
     run = mocker.patch("subprocess.run", return_value=_completed(data))
 
-    issues = AcliJiraAdapter("acli", "TEST").list_issues("https://jira.example", IssueQuery(limit=20))
+    issues = AcliJiraAdapter("acli", "TEST").list_issues(
+        "https://jira.example", IssueQuery(limit=20)
+    )
 
     assert issues[0].body == "ADF body"
     assert issues[0].url == "https://jira.example/browse/TEST-2"
@@ -92,7 +131,9 @@ def test_jira_list_uses_current_user_jql_and_flattens_adf(mocker):
 
 def test_jira_list_escapes_named_users_and_applies_filters(mocker):
     run = mocker.patch("subprocess.run", return_value=_completed([]))
-    query = IssueQuery(("assigned",), ('person"@agency.gov',), "closed", ("risk",), "token refresh", 10)
+    query = IssueQuery(
+        ("assigned",), ('person"@agency.gov',), "closed", ("risk",), "token refresh", 10
+    )
 
     AcliJiraAdapter("acli", "TEST").list_issues("https://jira.example", query)
 
@@ -114,9 +155,18 @@ def test_renderer_creates_separate_boards_with_direct_links_and_safe_text():
         url="https://github.com/o/r/issues/12",
     )
     boards = [
-        IssueBoard("GitHub.com", "github_com", "https://github.com/o/r/issues/#TICKET#", (issue,)),
-        IssueBoard("GitHub Helix", "github_helix", "https://helix/o/r/issues/#TICKET#", ()),
-        IssueBoard("GitLab", "gitlab", "https://gl/o/r/-/issues/#TICKET#", (), "unavailable"),
+        IssueBoard(
+            "GitHub.com",
+            "github_com",
+            "https://github.com/o/r/issues/#TICKET#",
+            (issue,),
+        ),
+        IssueBoard(
+            "GitHub Helix", "github_helix", "https://helix/o/r/issues/#TICKET#", ()
+        ),
+        IssueBoard(
+            "GitLab", "gitlab", "https://gl/o/r/-/issues/#TICKET#", (), "unavailable"
+        ),
         IssueBoard("Jira", "jira", "https://jira/browse/#TICKET#", ()),
     ]
 
@@ -130,7 +180,7 @@ def test_renderer_creates_separate_boards_with_direct_links_and_safe_text():
     assert rendered.count("```mermaid") == 4
     assert "ticketBaseUrl: 'https://github.com/o/r/issues/#TICKET#'" in rendered
     assert "@{ ticket: '12' }" in rendered
-    assert '[12](https://github.com/o/r/issues/12)' in rendered
+    assert "[12](https://github.com/o/r/issues/12)" in rendered
     assert "&quot;unsafe&quot;" in rendered
     assert "&lt;markup&gt;" not in rendered  # truncated before this content
     assert "Provider query failed: unavailable" in rendered

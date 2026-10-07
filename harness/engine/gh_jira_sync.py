@@ -8,6 +8,7 @@ flows avoid the split-brain oscillation of a single bidirectional sync:
 Neither flow ever writes the Jira description field (see AcliJiraAdapter
 module docstring for the incident that motivated this).
 """
+
 from __future__ import annotations
 
 from harness.adapters.acli_jira import (
@@ -71,7 +72,9 @@ def sync_jira_from_github(
     remove_labels = []
     if cfg["sync"].get("sync_milestone", True):
         remove_labels = [
-            label for label in existing_labels if label.startswith(ms_prefix) and label not in desired_labels
+            label
+            for label in existing_labels
+            if label.startswith(ms_prefix) and label not in desired_labels
         ]
 
     assignee = None
@@ -87,7 +90,9 @@ def sync_jira_from_github(
         comment_body = build_sync_comment(gh_items)
         existing_comment = find_sync_comment(jira.list_comments(key))
         existing_body = (existing_comment or {}).get("body") or ""
-        want_comment = strip_sync_timestamp(comment_body) != strip_sync_timestamp(existing_body)
+        want_comment = strip_sync_timestamp(comment_body) != strip_sync_timestamp(
+            existing_body
+        )
 
     if not (add_labels or remove_labels or assignee or want_comment):
         result["actions"].append("no changes")
@@ -102,7 +107,11 @@ def sync_jira_from_github(
 
     if add_labels or remove_labels or assignee:
         ok, msg = jira.edit(
-            key, assignee=assignee, add_labels=add_labels, remove_labels=remove_labels, dry_run=dry_run
+            key,
+            assignee=assignee,
+            add_labels=add_labels,
+            remove_labels=remove_labels,
+            dry_run=dry_run,
         )
         (result["actions"] if ok else result["errors"]).append(msg)
 
@@ -159,7 +168,9 @@ def plan_backfill_github_from_jira(
 
     result["action"] = "backfill"
     result["login"] = login
-    result["reason"] = f"Jira assignee {jira['assignee_name']} <{jira_email}> -> GitHub @{login}"
+    result["reason"] = (
+        f"Jira assignee {jira['assignee_name']} <{jira_email}> -> GitHub @{login}"
+    )
     return result
 
 

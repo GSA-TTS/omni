@@ -6,6 +6,7 @@ pairs per sync edge. The reconciler itself performs no cross-edge bookkeeping;
 anchor UUIDs in body_with_anchor() are what let the CLI avoid re-processing
 an issue it just wrote (see cli.py's sync command).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -55,18 +56,32 @@ def reconcile(
     )
 
     if dry_run or direction is None or not diff.has_changes:
-        return ReconcileResult(diff=diff, applied=False, direction=direction, body_mode=body_mode)
+        return ReconcileResult(
+            diff=diff, applied=False, direction=direction, body_mode=body_mode
+        )
 
     if direction == "left-to-right":
         _apply_patch(
-            right_adapter, right_id, source=left_issue, target=right_issue, diff=diff, body_mode=body_mode
+            right_adapter,
+            right_id,
+            source=left_issue,
+            target=right_issue,
+            diff=diff,
+            body_mode=body_mode,
         )
     else:
         _apply_patch(
-            left_adapter, left_id, source=right_issue, target=left_issue, diff=diff, body_mode=body_mode
+            left_adapter,
+            left_id,
+            source=right_issue,
+            target=left_issue,
+            diff=diff,
+            body_mode=body_mode,
         )
 
-    return ReconcileResult(diff=diff, applied=True, direction=direction, body_mode=body_mode)
+    return ReconcileResult(
+        diff=diff, applied=True, direction=direction, body_mode=body_mode
+    )
 
 
 def _apply_patch(

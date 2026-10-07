@@ -3,6 +3,7 @@
 All issue-tracking providers (GitHub, GitLab, Jira) serialize to and from this
 schema to avoid an M x N conversion matrix between provider formats.
 """
+
 from __future__ import annotations
 
 import re
@@ -36,19 +37,23 @@ class CanonicalIssue:
     sync_metadata: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def create_new(cls, title: str, body_markdown: str, **kwargs) -> "CanonicalIssue":
+    def create_new(cls, title: str, body_markdown: str, **kwargs) -> CanonicalIssue:
         return cls(title=title, body_markdown=body_markdown, **kwargs)
 
     def body_with_anchor(self) -> str:
         """Return body markdown with the sync anchor footer appended."""
         clean_body = strip_anchor(self.body_markdown)
         if "\x00" in clean_body:
-            raise ValueError("issue body contains a NUL byte, which no provider CLI accepts")
+            raise ValueError(
+                "issue body contains a NUL byte, which no provider CLI accepts"
+            )
         links = " | ".join(f"{k}:{v}" for k, v in sorted(self.sync_metadata.items()))
-        footer = f"<!-- {ANCHOR_PREFIX}: {self.uuid} -->\n<!-- {LINKS_PREFIX}: {links} -->"
+        footer = (
+            f"<!-- {ANCHOR_PREFIX}: {self.uuid} -->\n<!-- {LINKS_PREFIX}: {links} -->"
+        )
         return f"{clean_body}\n\n{footer}" if clean_body else footer
 
-    def diff(self, other: "CanonicalIssue") -> "DiffResult":
+    def diff(self, other: CanonicalIssue) -> DiffResult:
         from harness.engine.diff import compute_diff
 
         return compute_diff(self, other)

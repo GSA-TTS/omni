@@ -69,7 +69,9 @@ def test_render_matrix_shapes_output():
 def test_github_get_issue_single_call(mocker):
     mocker.patch(
         "subprocess.run",
-        return_value=_ok('{"title":"t","body":"b","state":"OPEN","labels":[],"assignees":[]}'),
+        return_value=_ok(
+            '{"title":"t","body":"b","state":"OPEN","labels":[],"assignees":[]}'
+        ),
     )
     adapter = GitHubAdapter("github.com", "o/r")
     adapter.metrics = CliMetrics()

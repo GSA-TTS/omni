@@ -9,6 +9,7 @@ harness derives:
 Host field names map to logical targets: gh (github.com), helix (GHES),
 gitlab (workshop.cloud.gov). Jira assignees use the email key directly.
 """
+
 from __future__ import annotations
 
 import tomllib
@@ -35,7 +36,7 @@ class UserRoster:
         self._by_email = {email.lower(): entry for email, entry in users.items()}
 
     @classmethod
-    def load(cls, path: Path = USERS_TOML, validate: bool = True) -> "UserRoster":
+    def load(cls, path: Path = USERS_TOML, validate: bool = True) -> UserRoster:
         if not path.exists():
             return cls({})
         data = tomllib.loads(path.read_text())
@@ -119,12 +120,16 @@ def _validate_users(data: dict, source: Path) -> None:
     schema = json.loads(resource_text("schema/users.schema.json"))
     try:
         jsonschema.validate(data, schema)
-    except jsonschema.ValidationError as exc:  # pragma: no cover - exercised when installed
+    except (
+        jsonschema.ValidationError
+    ) as exc:  # pragma: no cover - exercised when installed
         sys.exit(f"users.toml invalid in {source}: {exc.message}")
 
     users = {email.lower() for email in data.get("users", {})}
     for group, entry in data.get("groups", {}).items():
-        unknown = sorted(email for email in entry["members"] if email.lower() not in users)
+        unknown = sorted(
+            email for email in entry["members"] if email.lower() not in users
+        )
         if unknown:
             sys.exit(
                 f"users.toml invalid in {source}: group {group!r} references unknown users: "

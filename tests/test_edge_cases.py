@@ -4,6 +4,7 @@ the harness: GFM<->ADF transform round-trips and sync-anchor strip/parse.
 These assert the invariants we *expect* to hold and xfail-document the ones
 we know are lossy, so the agent skills stay honest about real behavior.
 """
+
 import pytest
 
 from harness.models import CanonicalIssue, parse_anchor, strip_anchor
@@ -13,10 +14,24 @@ from harness.transformers.markdown_jira import adf_to_markdown, markdown_to_adf
 # Cases whose ADF round-trip is known-lossy or not GFM at all. Documented,
 # not silently tolerated -- these feed skills/known-failures.
 _ADF_LOSSY = {
-    "image", "task_list", "fenced_code_backticks", "hr", "html_comment",
-    "jira_wiki", "adf_panel_ish", "anchor_lookalike", "yaml_frontmatter",
-    "math", "footnote", "autolink", "escaped_markdown",
-    "bold_italic_code", "crlf", "trailing_ws", "zero_width", "null_byteish",
+    "image",
+    "task_list",
+    "fenced_code_backticks",
+    "hr",
+    "html_comment",
+    "jira_wiki",
+    "adf_panel_ish",
+    "anchor_lookalike",
+    "yaml_frontmatter",
+    "math",
+    "footnote",
+    "autolink",
+    "escaped_markdown",
+    "bold_italic_code",
+    "crlf",
+    "trailing_ws",
+    "zero_width",
+    "null_byteish",
     "rtl",
 }
 
@@ -60,7 +75,9 @@ def test_forged_anchor_is_parsed_but_body_isolated():
 
 
 def test_real_body_with_forged_anchor_keeps_prose():
-    body = "Real prose paragraph.\n\n<!-- fed-sync-anchor: fake -->\n<!-- links: x:1 -->"
+    body = (
+        "Real prose paragraph.\n\n<!-- fed-sync-anchor: fake -->\n<!-- links: x:1 -->"
+    )
     assert strip_anchor(body) == "Real prose paragraph."
 
 

@@ -2,6 +2,7 @@
 Moderate Jira instances. Translates canonical status to the target project's
 workflow transition names and markdown body to Atlassian Document Format.
 """
+
 from __future__ import annotations
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
@@ -19,7 +20,9 @@ _STATUS_TO_TRANSITION = {
 class JiraAdapter(BaseIssueAdapter):
     """Issue adapter for FedRAMP Moderate Jira via `jira-cli`."""
 
-    def __init__(self, instance_url: str, project: str, status_map: dict[str, str] | None = None):
+    def __init__(
+        self, instance_url: str, project: str, status_map: dict[str, str] | None = None
+    ):
         self.instance_url = instance_url
         self.project = project
         self.status_map = {**_STATUS_TO_TRANSITION, **(status_map or {})}
@@ -37,14 +40,20 @@ class JiraAdapter(BaseIssueAdapter):
         fields = data.get("fields", {})
         status_name = (fields.get("status") or {}).get("name", "To Do")
         body = fields.get("description")
-        body_markdown = adf_to_markdown(body) if isinstance(body, dict) else (body or "")
+        body_markdown = (
+            adf_to_markdown(body) if isinstance(body, dict) else (body or "")
+        )
         return CanonicalIssue(
             title=fields.get("summary", ""),
             body_markdown=body_markdown,
-            status="CLOSED" if status_name in ("Done", "Closed", "Resolved") else "OPEN",
+            status="CLOSED"
+            if status_name in ("Done", "Closed", "Resolved")
+            else "OPEN",
             priority=(fields.get("priority") or {}).get("name"),
             labels=list(fields.get("labels", [])),
-            assignees=[fields["assignee"]["displayName"]] if fields.get("assignee") else [],
+            assignees=[fields["assignee"]["displayName"]]
+            if fields.get("assignee")
+            else [],
         )
 
     def create_issue(self, issue: CanonicalIssue) -> str:

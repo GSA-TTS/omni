@@ -41,7 +41,10 @@ class TestGitHub:
 class TestGitLab:
     def _project(self, issues=True, level=30):
         return json.dumps(
-            {"issues_enabled": issues, "permissions": {"project_access": {"access_level": level}}}
+            {
+                "issues_enabled": issues,
+                "permissions": {"project_access": {"access_level": level}},
+            }
         )
 
     def test_developer_access_ok(self):
@@ -49,16 +52,25 @@ class TestGitLab:
         assert r.ok
 
     def test_below_developer_fails(self):
-        r = check_gitlab("workshop.cloud.gov", "g/p", _runner([(0, self._project(level=20))]))
+        r = check_gitlab(
+            "workshop.cloud.gov", "g/p", _runner([(0, self._project(level=20))])
+        )
         assert r.ok  # visible; low/absent direct access reported, not hard-failed
         assert "visible" in r.detail
 
     def test_issues_disabled(self):
-        r = check_gitlab("workshop.cloud.gov", "g/p", _runner([(0, self._project(issues=False))]))
+        r = check_gitlab(
+            "workshop.cloud.gov", "g/p", _runner([(0, self._project(issues=False))])
+        )
         assert not r.ok
 
     def test_null_permissions_still_visible(self):
-        payload = json.dumps({"issues_enabled": True, "permissions": {"project_access": None, "group_access": None}})
+        payload = json.dumps(
+            {
+                "issues_enabled": True,
+                "permissions": {"project_access": None, "group_access": None},
+            }
+        )
         r = check_gitlab("workshop.cloud.gov", "g/p", _runner([(0, payload)]))
         assert r.ok
 
@@ -89,7 +101,20 @@ def test_preflight_uses_gitlab_project_config(mocker, monkeypatch, tmp_path):
             "jira": {},
         },
     )
-    check = mocker.patch.object(cli, "check_gitlab", return_value=type("Result", (), {"ok": True, "target": "gitlab.example", "resource": "group/project", "detail": "ok"})())
+    check = mocker.patch.object(
+        cli,
+        "check_gitlab",
+        return_value=type(
+            "Result",
+            (),
+            {
+                "ok": True,
+                "target": "gitlab.example",
+                "resource": "group/project",
+                "detail": "ok",
+            },
+        )(),
+    )
 
     cli.preflight(tmp_path / "omni-project.toml")
 

@@ -34,4 +34,28 @@ dev = [
     "pytest==9.1.1",
     "pytest-mock==3.16.0",
     "hypothesis==6.168.5",
+    "mypy==2.4.0",
+    "pip-audit==2.10.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.10",
 ]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["B", "E4", "E7", "E9", "F", "I", "UP"]
+ignore = ["B008"] # Typer uses Option/Argument calls as declarative defaults.
+
+[tool.mypy]
+python_version = "3.13"
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+source = ["harness"]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true

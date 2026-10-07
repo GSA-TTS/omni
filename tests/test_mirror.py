@@ -1,6 +1,6 @@
 import subprocess
 
-from harness.engine.mirror import GitMirror, MirrorResult
+from harness.engine.mirror import GitMirror
 
 
 def _ok(stdout: str = "") -> subprocess.CompletedProcess:
@@ -27,7 +27,9 @@ def test_dry_run_pushes_nothing(mocker):
 
 
 def test_unknown_target_reported_not_fatal(mocker):
-    mocker.patch("subprocess.run", return_value=_ok("to github\n * [new branch] main -> main"))
+    mocker.patch(
+        "subprocess.run", return_value=_ok("to github\n * [new branch] main -> main")
+    )
     results = GitMirror(_REMOTES).push("main", ["origin", "nope"], dry_run=False)
 
     by_name = {r.remote: r for r in results}
@@ -42,7 +44,9 @@ def test_adds_remote_when_absent_then_pushes(mocker):
         "subprocess.run",
         side_effect=[_fail("no such remote"), _ok(), _ok("Everything up-to-date")],
     )
-    results = GitMirror({"helix": _REMOTES["helix"]}).push("main", ["helix"], dry_run=False)
+    results = GitMirror({"helix": _REMOTES["helix"]}).push(
+        "main", ["helix"], dry_run=False
+    )
 
     assert results[0].ok
     cmds = [call.args[0] for call in run_mock.call_args_list]
@@ -65,7 +69,9 @@ def test_updates_remote_url_when_present(mocker):
 
 def test_push_failure_reported(mocker):
     mocker.patch("subprocess.run", side_effect=[_ok("url"), _ok(), _fail("rejected")])
-    results = GitMirror({"origin": _REMOTES["origin"]}).push("main", ["origin"], dry_run=False)
+    results = GitMirror({"origin": _REMOTES["origin"]}).push(
+        "main", ["origin"], dry_run=False
+    )
 
     assert results[0].ok is False
     assert "rejected" in results[0].message
@@ -73,14 +79,20 @@ def test_push_failure_reported(mocker):
 
 def test_default_does_not_force_ssh_batchmode(mocker):
     """Interactive auth (SSH passphrase / gh web session) must not be suppressed by default."""
-    run_mock = mocker.patch("subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")])
+    run_mock = mocker.patch(
+        "subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")]
+    )
     GitMirror({"origin": _REMOTES["origin"]}).push("main", ["origin"], dry_run=False)
     env = run_mock.call_args_list[-1].kwargs["env"]
     assert "GIT_SSH_COMMAND" not in env or "BatchMode" not in env["GIT_SSH_COMMAND"]
 
 
 def test_batch_opt_in_sets_ssh_batchmode(mocker):
-    run_mock = mocker.patch("subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")])
-    GitMirror({"origin": _REMOTES["origin"]}, batch=True).push("main", ["origin"], dry_run=False)
+    run_mock = mocker.patch(
+        "subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")]
+    )
+    GitMirror({"origin": _REMOTES["origin"]}, batch=True).push(
+        "main", ["origin"], dry_run=False
+    )
     env = run_mock.call_args_list[-1].kwargs["env"]
     assert "BatchMode=yes" in env["GIT_SSH_COMMAND"]
