@@ -11,88 +11,183 @@ def _fail(stderr: str = "boom") -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=stderr)
 
 
-_REMOTES = {
-    "origin": "git@github.com:GSA-TTS/omni.git",
-    "helix": "git@github.helix.gsa.gov:example-owner/omni.git",
-}
+_URL = "git@github.helix.gsa.gov:org/repo.git"
+_SHA = "a" * 40
+_OLD = "b" * 40
 
 
-def test_dry_run_pushes_nothing(mocker):
-    run_mock = mocker.patch("subprocess.run")
-    results = GitMirror(_REMOTES).push("main", ["origin", "helix"], dry_run=True)
-
-    run_mock.assert_not_called()
-    assert all(r.ok for r in results)
-    assert all(r.message.startswith("dry-run:") for r in results)
+def _source_checks(remote_output: str = ""):
+    return [_ok(), _ok(_SHA), _ok(_SHA), _ok(), _ok(remote_output)]
 
 
-def test_unknown_target_reported_not_fatal(mocker):
+def test_dry_run_resolves_head_to_explicit_sha_refspec(mocker):
+    run = mocker.patch("subprocess.run", side_effect=_source_checks())
+    result = GitMirror({"helix": _URL}).push("HEAD", "main", ["helix"], dry_run=True)[0]
+
+    assert result.ok
+    assert f"{_SHA}:refs/heads/main" in result.message
+    assert "new branch" in result.message
+    commands = [call.args[0] for call in run.call_args_list]
+    assert [
+        "git",
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        "HEAD^{commit}",
+    ] in commands
+    assert not any(command[:2] == ["git", "push"] for command in commands)
+
+
+def test_stale_branch_is_rejected_when_not_checked_out(mocker):
+    mocker.patch("subprocess.run", side_effect=[_ok(), _ok(_OLD), _ok(_SHA)])
+    result = GitMirror({"helix": _URL}).push("main", "main", ["helix"], dry_run=True)[0]
+
+    assert not result.ok
+    assert "checked-out HEAD" in result.message
+    assert "--allow-non-head" in result.message
+
+
+def test_allow_non_head_pushes_exact_historical_sha(mocker):
+    run = mocker.patch(
+        "subprocess.run",
+        side_effect=[_ok(), _ok(_OLD), _ok(_SHA), _ok(), _ok(), _ok("pushed")],
+    )
+    result = GitMirror({"archive": _URL}).push(
+        "main",
+        "archive/main",
+        ["archive"],
+        dry_run=False,
+        allow_non_head=True,
+    )[0]
+
+    assert result.ok
+    assert run.call_args_list[-1].args[0] == [
+        "git",
+        "push",
+        "--",
+        _URL,
+        f"{_OLD}:refs/heads/archive/main",
+    ]
+
+
+def test_existing_destination_is_rejected_by_default(mocker):
     mocker.patch(
-        "subprocess.run", return_value=_ok("to github\n * [new branch] main -> main")
-    )
-    results = GitMirror(_REMOTES).push("main", ["origin", "nope"], dry_run=False)
-
-    by_name = {r.remote: r for r in results}
-    assert by_name["origin"].ok is True
-    assert by_name["nope"].ok is False
-    assert "no remote" in by_name["nope"].message
-
-
-def test_adds_remote_when_absent_then_pushes(mocker):
-    # get-url fails (absent) -> remote add -> push ok
-    run_mock = mocker.patch(
         "subprocess.run",
-        side_effect=[_fail("no such remote"), _ok(), _ok("Everything up-to-date")],
+        side_effect=_source_checks(f"{_OLD}\trefs/heads/main\n"),
     )
-    results = GitMirror({"helix": _REMOTES["helix"]}).push(
-        "main", ["helix"], dry_run=False
-    )
+    result = GitMirror({"workshop": _URL}).push(
+        "HEAD", "main", ["workshop"], dry_run=True
+    )[0]
 
-    assert results[0].ok
-    cmds = [call.args[0] for call in run_mock.call_args_list]
-    assert ["git", "remote", "get-url", "helix"] in cmds
-    assert any(c[:3] == ["git", "remote", "add"] for c in cmds)
-    assert cmds[-1] == ["git", "push", "helix", "main"]
+    assert not result.ok
+    assert "already exists" in result.message
+    assert "review branch" in result.message
 
 
-def test_updates_remote_url_when_present(mocker):
-    # get-url ok (present) -> set-url -> push ok
-    run_mock = mocker.patch(
+def test_identical_destination_is_idempotent_success(mocker):
+    run = mocker.patch(
         "subprocess.run",
-        side_effect=[_ok("old-url"), _ok(), _ok("pushed")],
+        side_effect=_source_checks(f"{_SHA}\trefs/heads/main\n"),
     )
-    GitMirror({"origin": _REMOTES["origin"]}).push("main", ["origin"], dry_run=False)
+    result = GitMirror({"helix": _URL}).push("HEAD", "main", ["helix"], dry_run=False)[
+        0
+    ]
 
-    cmds = [call.args[0] for call in run_mock.call_args_list]
-    assert any(c[:3] == ["git", "remote", "set-url"] for c in cmds)
+    assert result.ok
+    assert "already synchronized" in result.message
+    assert not any(call.args[0][1] == "push" for call in run.call_args_list)
 
 
-def test_push_failure_reported(mocker):
-    mocker.patch("subprocess.run", side_effect=[_ok("url"), _ok(), _fail("rejected")])
-    results = GitMirror({"origin": _REMOTES["origin"]}).push(
-        "main", ["origin"], dry_run=False
+def test_embedded_https_credentials_are_rejected_before_remote_access(mocker):
+    run = mocker.patch(
+        "subprocess.run", side_effect=[_ok(), _ok(_SHA), _ok(_SHA), _ok()]
+    )
+    result = GitMirror({"unsafe": "https://token@example.test/repo.git"}).push(
+        "HEAD", "main", ["unsafe"], dry_run=True
+    )[0]
+
+    assert not result.ok
+    assert result.url == ""
+    assert "embedded credentials" in result.message
+    assert not any(call.args[0][1] == "ls-remote" for call in run.call_args_list)
+
+
+def test_ssh_username_without_password_is_allowed(mocker):
+    url = "ssh://git@example.test/org/repo.git"
+    mocker.patch("subprocess.run", side_effect=_source_checks())
+    result = GitMirror({"ssh": url}).push("HEAD", "main", ["ssh"], dry_run=True)[0]
+    assert result.ok
+
+
+def test_allow_existing_reports_both_shas_before_apply(mocker):
+    run = mocker.patch(
+        "subprocess.run",
+        side_effect=[
+            *_source_checks(f"{_OLD}\trefs/heads/main\n"),
+            _ok("fast-forwarded"),
+        ],
+    )
+    result = GitMirror({"helix": _URL}).push(
+        "HEAD",
+        "main",
+        ["helix"],
+        dry_run=False,
+        allow_existing=True,
+    )[0]
+
+    assert result.ok
+    assert run.call_args_list[-1].args[0] == [
+        "git",
+        "push",
+        "--",
+        _URL,
+        f"{_SHA}:refs/heads/main",
+    ]
+
+
+def test_integrity_failure_blocks_all_targets(mocker):
+    mocker.patch(
+        "subprocess.run",
+        side_effect=[_ok(), _ok(_SHA), _ok(_SHA), _fail("bad object")],
+    )
+    results = GitMirror({"one": _URL, "two": _URL}).push("HEAD", "main", ["one", "two"])
+
+    assert all(not result.ok for result in results)
+    assert all("object-integrity" in result.message for result in results)
+
+
+def test_unknown_target_is_reported_without_push(mocker):
+    run = mocker.patch(
+        "subprocess.run", side_effect=[_ok(), _ok(_SHA), _ok(_SHA), _ok()]
+    )
+    result = GitMirror({"helix": _URL}).push(
+        "HEAD", "main", ["unknown"], dry_run=False
+    )[0]
+    assert not result.ok
+    assert "no remote" in result.message
+    assert not any(call.args[0][:2] == ["git", "push"] for call in run.call_args_list)
+
+
+def test_batch_mode_is_applied_to_remote_probes_and_push(mocker):
+    run = mocker.patch("subprocess.run", side_effect=[*_source_checks(), _ok("pushed")])
+    GitMirror({"helix": _URL}, batch=True).push(
+        "HEAD", "main", ["helix"], dry_run=False
+    )
+    remote_calls = [
+        call for call in run.call_args_list if call.args[0][1] in {"ls-remote", "push"}
+    ]
+    assert remote_calls
+    assert all(
+        "BatchMode=yes" in call.kwargs["env"]["GIT_SSH_COMMAND"]
+        for call in remote_calls
     )
 
-    assert results[0].ok is False
-    assert "rejected" in results[0].message
 
-
-def test_default_does_not_force_ssh_batchmode(mocker):
-    """Interactive auth (SSH passphrase / gh web session) must not be suppressed by default."""
-    run_mock = mocker.patch(
-        "subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")]
-    )
-    GitMirror({"origin": _REMOTES["origin"]}).push("main", ["origin"], dry_run=False)
-    env = run_mock.call_args_list[-1].kwargs["env"]
-    assert "GIT_SSH_COMMAND" not in env or "BatchMode" not in env["GIT_SSH_COMMAND"]
-
-
-def test_batch_opt_in_sets_ssh_batchmode(mocker):
-    run_mock = mocker.patch(
-        "subprocess.run", side_effect=[_ok("url"), _ok(), _ok("pushed")]
-    )
-    GitMirror({"origin": _REMOTES["origin"]}, batch=True).push(
-        "main", ["origin"], dry_run=False
-    )
-    env = run_mock.call_args_list[-1].kwargs["env"]
-    assert "BatchMode=yes" in env["GIT_SSH_COMMAND"]
+def test_invalid_destination_is_rejected_before_source_resolution(mocker):
+    run = mocker.patch("subprocess.run", return_value=_fail("invalid"))
+    result = GitMirror({"helix": _URL}).push(
+        "HEAD", "-invalid", ["helix"], dry_run=True
+    )[0]
+    assert not result.ok
+    assert "invalid destination" in result.message
+    assert run.call_count == 1

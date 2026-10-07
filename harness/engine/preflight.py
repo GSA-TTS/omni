@@ -75,7 +75,21 @@ def check_gitlab(
         {"GITLAB_HOST": host},
     )
     if rc != 0:
-        return PreflightCheck(host, repo, False, "project not found or not visible")
+        if "401" in out or "Unauthorized" in out:
+            return PreflightCheck(
+                host,
+                repo,
+                False,
+                "GitLab authentication failed; verify the host token is loaded",
+            )
+        if "404" in out or "Not Found" in out:
+            return PreflightCheck(
+                host,
+                repo,
+                False,
+                "project not found or token cannot see its namespace",
+            )
+        return PreflightCheck(host, repo, False, "GitLab API request failed")
     import json
 
     try:
@@ -91,10 +105,11 @@ def check_gitlab(
         project_access.get("access_level", 0), group_access.get("access_level", 0)
     )
     if level < 30:  # Developer
-        # Project is visible; access may still be sufficient to read/comment.
-        # Report the level rather than hard-failing on an unreadable permission block.
         return PreflightCheck(
-            host, repo, True, f"visible (access level {level or 'via group'})"
+            host,
+            repo,
+            False,
+            "project is visible but write access is unverified; inspect project/group membership",
         )
     return PreflightCheck(host, repo, True, f"writable (access level {level})")
 

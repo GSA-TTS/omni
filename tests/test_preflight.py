@@ -55,8 +55,8 @@ class TestGitLab:
         r = check_gitlab(
             "workshop.cloud.gov", "g/p", _runner([(0, self._project(level=20))])
         )
-        assert r.ok  # visible; low/absent direct access reported, not hard-failed
-        assert "visible" in r.detail
+        assert not r.ok
+        assert "unverified" in r.detail
 
     def test_issues_disabled(self):
         r = check_gitlab(
@@ -64,7 +64,7 @@ class TestGitLab:
         )
         assert not r.ok
 
-    def test_null_permissions_still_visible(self):
+    def test_null_permissions_do_not_prove_write_access(self):
         payload = json.dumps(
             {
                 "issues_enabled": True,
@@ -72,11 +72,27 @@ class TestGitLab:
             }
         )
         r = check_gitlab("workshop.cloud.gov", "g/p", _runner([(0, payload)]))
-        assert r.ok
+        assert not r.ok
+        assert "membership" in r.detail
 
     def test_project_not_found(self):
         r = check_gitlab("workshop.cloud.gov", "g/nope", _runner([(1, "404")]))
         assert not r.ok
+        assert "namespace" in r.detail
+
+    def test_unauthorized_is_not_reported_as_missing_project(self):
+        r = check_gitlab(
+            "workshop.cloud.gov", "g/p", _runner([(1, "401 Unauthorized")])
+        )
+        assert not r.ok
+        assert "authentication failed" in r.detail
+
+    def test_other_api_failure_is_distinct(self):
+        r = check_gitlab(
+            "workshop.cloud.gov", "g/p", _runner([(1, "connection reset")])
+        )
+        assert not r.ok
+        assert r.detail == "GitLab API request failed"
 
 
 class TestJira:
