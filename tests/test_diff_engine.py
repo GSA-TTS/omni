@@ -1,9 +1,15 @@
-from harness.models import CanonicalIssue
 from harness.engine.diff import compute_diff
+from harness.models import CanonicalIssue
 
 
 def _issue(**overrides) -> CanonicalIssue:
-    base = dict(title="Title", body_markdown="Body", status="OPEN", labels=["a"], assignees=["jdoe"])
+    base = dict(
+        title="Title",
+        body_markdown="Body",
+        status="OPEN",
+        labels=["a"],
+        assignees=["jdoe"],
+    )
     base.update(overrides)
     return CanonicalIssue(**base)
 
@@ -52,7 +58,11 @@ def test_additive_label_diff_detects_missing_source_labels():
 
 
 def test_anchor_footer_stripped_before_body_diff():
-    left = _issue(body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:abc -->\n<!-- links: gh-tts:12 -->")
-    right = _issue(body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:xyz -->\n<!-- links: gl-cg:88 -->")
+    left = _issue(
+        body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:abc -->\n<!-- links: gh-tts:12 -->"
+    )
+    right = _issue(
+        body_markdown="Body\n\n<!-- fed-sync-anchor: urn:fed:sync:xyz -->\n<!-- links: gl-cg:88 -->"
+    )
     result = compute_diff(left, right)
     assert not result.has_changes

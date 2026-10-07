@@ -9,11 +9,12 @@ skills/omni-sync/known-failures.md.
 Pure report objects; the actual CLI calls are injected so this stays testable
 offline.
 """
+
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 
 @dataclass
@@ -39,10 +40,18 @@ def _default_runner(argv: list[str], env: dict[str, str]) -> tuple[int, str]:
         return 1, str(exc)
 
 
-def check_github(host: str, repo: str, runner: Runner = _default_runner) -> PreflightCheck:
+def check_github(
+    host: str, repo: str, runner: Runner = _default_runner
+) -> PreflightCheck:
     """Verify a GitHub repo exists, has issues enabled, and is push-writable."""
     rc, out = runner(
-        ["gh", "api", f"repos/{repo}", "--jq", "[.has_issues, .permissions.push] | @tsv"],
+        [
+            "gh",
+            "api",
+            f"repos/{repo}",
+            "--jq",
+            "[.has_issues, .permissions.push] | @tsv",
+        ],
         {"GH_HOST": host},
     )
     if rc != 0:
@@ -57,7 +66,9 @@ def check_github(host: str, repo: str, runner: Runner = _default_runner) -> Pref
     return PreflightCheck(host, repo, True, "writable, issues enabled")
 
 
-def check_gitlab(host: str, repo: str, runner: Runner = _default_runner) -> PreflightCheck:
+def check_gitlab(
+    host: str, repo: str, runner: Runner = _default_runner
+) -> PreflightCheck:
     """Verify a GitLab project exists, has issues enabled, and grants Developer+ access."""
     rc, out = runner(
         ["glab", "api", f"projects/{repo.replace('/', '%2F')}"],
@@ -76,20 +87,38 @@ def check_gitlab(host: str, repo: str, runner: Runner = _default_runner) -> Pref
     permissions = data.get("permissions") or {}
     project_access = permissions.get("project_access") or {}
     group_access = permissions.get("group_access") or {}
-    level = max(project_access.get("access_level", 0), group_access.get("access_level", 0))
+    level = max(
+        project_access.get("access_level", 0), group_access.get("access_level", 0)
+    )
     if level < 30:  # Developer
         # Project is visible; access may still be sufficient to read/comment.
         # Report the level rather than hard-failing on an unreadable permission block.
-        return PreflightCheck(host, repo, True, f"visible (access level {level or 'via group'})")
+        return PreflightCheck(
+            host, repo, True, f"visible (access level {level or 'via group'})"
+        )
     return PreflightCheck(host, repo, True, f"writable (access level {level})")
 
 
-def check_jira(acli_bin: str, project_key: str, runner: Runner = _default_runner) -> PreflightCheck:
+def check_jira(
+    acli_bin: str, project_key: str, runner: Runner = _default_runner
+) -> PreflightCheck:
     """Verify the Jira project is visible via acli search."""
     rc, _ = runner(
-        [acli_bin, "jira", "workitem", "search", "--jql", f"project = {project_key}", "--limit", "1", "--json"],
+        [
+            acli_bin,
+            "jira",
+            "workitem",
+            "search",
+            "--jql",
+            f"project = {project_key}",
+            "--limit",
+            "1",
+            "--json",
+        ],
         {},
     )
     if rc != 0:
-        return PreflightCheck("jira", project_key, False, "project not visible or acli not authenticated")
+        return PreflightCheck(
+            "jira", project_key, False, "project not visible or acli not authenticated"
+        )
     return PreflightCheck("jira", project_key, True, "project visible")

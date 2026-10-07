@@ -22,7 +22,9 @@ class FakeAdapter(BaseIssueAdapter):
 
 def test_dry_run_never_applies_changes():
     left = FakeAdapter(CanonicalIssue.create_new(title="Left title", body_markdown="B"))
-    right = FakeAdapter(CanonicalIssue.create_new(title="Right title", body_markdown="B"))
+    right = FakeAdapter(
+        CanonicalIssue.create_new(title="Right title", body_markdown="B")
+    )
 
     result = reconcile(left, "1", right, "2", direction="left-to-right", dry_run=True)
 
@@ -33,7 +35,9 @@ def test_dry_run_never_applies_changes():
 
 def test_left_to_right_applies_left_as_source_of_truth():
     left = FakeAdapter(CanonicalIssue.create_new(title="Left title", body_markdown="B"))
-    right = FakeAdapter(CanonicalIssue.create_new(title="Right title", body_markdown="B"))
+    right = FakeAdapter(
+        CanonicalIssue.create_new(title="Right title", body_markdown="B")
+    )
 
     result = reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False)
 
@@ -45,7 +49,9 @@ def test_left_to_right_applies_left_as_source_of_truth():
 
 def test_right_to_left_applies_right_as_source_of_truth():
     left = FakeAdapter(CanonicalIssue.create_new(title="Left title", body_markdown="B"))
-    right = FakeAdapter(CanonicalIssue.create_new(title="Right title", body_markdown="B"))
+    right = FakeAdapter(
+        CanonicalIssue.create_new(title="Right title", body_markdown="B")
+    )
 
     result = reconcile(left, "1", right, "2", direction="right-to-left", dry_run=False)
 

@@ -32,7 +32,15 @@ def _pair():
 
 def test_replace_overwrites_target_body():
     left, right = _pair()
-    reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False, body_mode="replace")
+    reconcile(
+        left,
+        "1",
+        right,
+        "2",
+        direction="left-to-right",
+        dry_run=False,
+        body_mode="replace",
+    )
     assert right.updated is not None
     assert "SOURCE body" in right.updated.body_markdown
     assert "TARGET body" not in right.updated.body_markdown
@@ -41,7 +49,15 @@ def test_replace_overwrites_target_body():
 
 def test_append_preserves_target_and_adds_source():
     left, right = _pair()
-    reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False, body_mode="append")
+    reconcile(
+        left,
+        "1",
+        right,
+        "2",
+        direction="left-to-right",
+        dry_run=False,
+        body_mode="append",
+    )
     assert right.updated is not None
     assert "TARGET body" in right.updated.body_markdown
     assert "SOURCE body" in right.updated.body_markdown
@@ -51,15 +67,37 @@ def test_append_preserves_target_and_adds_source():
 
 def test_comment_mode_leaves_body_untouched():
     left, right = _pair()
-    reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False, body_mode="comment")
+    reconcile(
+        left,
+        "1",
+        right,
+        "2",
+        direction="left-to-right",
+        dry_run=False,
+        body_mode="comment",
+    )
     assert right.updated is None  # only the body differed, so no issue edit is needed
     assert right.comments == ["SOURCE body"]
 
 
 def test_comment_mode_still_applies_non_body_changes():
-    left = RecordingAdapter(CanonicalIssue.create_new("SOURCE title", "SOURCE body", labels=["bug"]))
-    right = RecordingAdapter(CanonicalIssue.create_new("TARGET title", "TARGET body", labels=["bug", "human"]))
-    reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False, body_mode="comment")
+    left = RecordingAdapter(
+        CanonicalIssue.create_new("SOURCE title", "SOURCE body", labels=["bug"])
+    )
+    right = RecordingAdapter(
+        CanonicalIssue.create_new(
+            "TARGET title", "TARGET body", labels=["bug", "human"]
+        )
+    )
+    reconcile(
+        left,
+        "1",
+        right,
+        "2",
+        direction="left-to-right",
+        dry_run=False,
+        body_mode="comment",
+    )
     assert right.comments == ["SOURCE body"]
     assert right.updated is not None
     assert right.updated.title == "SOURCE title"
@@ -69,12 +107,28 @@ def test_comment_mode_still_applies_non_body_changes():
 def test_dry_run_writes_nothing_in_any_mode():
     for mode in ("replace", "append", "comment"):
         left, right = _pair()
-        reconcile(left, "1", right, "2", direction="left-to-right", dry_run=True, body_mode=mode)
+        reconcile(
+            left,
+            "1",
+            right,
+            "2",
+            direction="left-to-right",
+            dry_run=True,
+            body_mode=mode,
+        )
         assert right.updated is None
         assert right.comments == []
 
 
 def test_result_records_body_mode():
     left, right = _pair()
-    result = reconcile(left, "1", right, "2", direction="left-to-right", dry_run=True, body_mode="append")
+    result = reconcile(
+        left,
+        "1",
+        right,
+        "2",
+        direction="left-to-right",
+        dry_run=True,
+        body_mode="append",
+    )
     assert result.body_mode == "append"

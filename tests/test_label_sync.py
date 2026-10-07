@@ -1,8 +1,8 @@
 import subprocess
 
+from harness.adapters.base import BaseIssueAdapter
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
-from harness.adapters.base import BaseIssueAdapter
 from harness.engine.reconciler import reconcile
 from harness.models import CanonicalIssue
 
@@ -14,7 +14,9 @@ def _ok(stdout: str = "") -> subprocess.CompletedProcess:
 def test_github_update_adds_labels(mocker):
     run_mock = mocker.patch("subprocess.run", return_value=_ok())
     adapter = GitHubAdapter("github.com", "o/r")
-    adapter.update_issue("1", CanonicalIssue.create_new("T", "B", labels=["bug", "area:sync"]))
+    adapter.update_issue(
+        "1", CanonicalIssue.create_new("T", "B", labels=["bug", "area:sync"])
+    )
     argv = run_mock.call_args_list[0].args[0]
     assert argv.count("--add-label") == 2
     assert "bug" in argv and "area:sync" in argv
@@ -68,7 +70,9 @@ def test_reconcile_ignores_target_only_labels_for_additive_convergence():
 
 def test_reconcile_preserves_target_only_labels_when_other_fields_change():
     left = _Rec(CanonicalIssue.create_new("Source", "B", labels=["bug"]))
-    right = _Rec(CanonicalIssue.create_new("Target", "B", labels=["bug", "human-owned"]))
+    right = _Rec(
+        CanonicalIssue.create_new("Target", "B", labels=["bug", "human-owned"])
+    )
     result = reconcile(left, "1", right, "2", direction="left-to-right", dry_run=False)
     assert result.applied
     assert right.updated is not None

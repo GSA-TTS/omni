@@ -6,6 +6,7 @@ bold/italic/code marks, links, bullet/ordered lists, code blocks, and
 blockquotes. Round-trips are best-effort -- ADF constructs with no Markdown
 equivalent (panels, mentions, emojis) are passed through as plain text.
 """
+
 from __future__ import annotations
 
 import re
@@ -72,29 +73,42 @@ def markdown_to_adf(markdown: str) -> dict[str, Any]:
             ordered = bool(_ORDERED_RE.match(line))
             items: list[dict[str, Any]] = []
             pattern = _ORDERED_RE if ordered else _BULLET_RE
-            while i < len(lines) and pattern.match(lines[i]):
-                text = pattern.match(lines[i]).group(2)
+            while i < len(lines):
+                item = pattern.match(lines[i])
+                if item is None:
+                    break
+                text = item.group(2)
                 items.append(
                     {
                         "type": "listItem",
-                        "content": [{"type": "paragraph", "content": _inline_to_adf(text)}],
+                        "content": [
+                            {"type": "paragraph", "content": _inline_to_adf(text)}
+                        ],
                     }
                 )
                 i += 1
-            content.append({"type": "orderedList" if ordered else "bulletList", "content": items})
+            content.append(
+                {"type": "orderedList" if ordered else "bulletList", "content": items}
+            )
             continue
 
         quote = _BLOCKQUOTE_RE.match(line)
         if quote:
             quote_lines = []
-            while i < len(lines) and _BLOCKQUOTE_RE.match(lines[i]):
-                quote_lines.append(_BLOCKQUOTE_RE.match(lines[i]).group(1))
+            while i < len(lines):
+                quote_line = _BLOCKQUOTE_RE.match(lines[i])
+                if quote_line is None:
+                    break
+                quote_lines.append(quote_line.group(1))
                 i += 1
             content.append(
                 {
                     "type": "blockquote",
                     "content": [
-                        {"type": "paragraph", "content": _inline_to_adf("\n".join(quote_lines))}
+                        {
+                            "type": "paragraph",
+                            "content": _inline_to_adf("\n".join(quote_lines)),
+                        }
                     ],
                 }
             )
@@ -103,7 +117,11 @@ def markdown_to_adf(markdown: str) -> dict[str, Any]:
         content.append({"type": "paragraph", "content": _inline_to_adf(line)})
         i += 1
 
-    return {"type": "doc", "version": 1, "content": content or [{"type": "paragraph", "content": []}]}
+    return {
+        "type": "doc",
+        "version": 1,
+        "content": content or [{"type": "paragraph", "content": []}],
+    }
 
 
 def adf_to_markdown(adf: dict[str, Any]) -> str:
@@ -128,7 +146,10 @@ def _block_to_markdown(block: dict[str, Any]) -> str:
     if btype == "bulletList":
         return "\n".join(f"- {_list_item_to_markdown(item)}" for item in content)
     if btype == "orderedList":
-        return "\n".join(f"{idx}. {_list_item_to_markdown(item)}" for idx, item in enumerate(content, 1))
+        return "\n".join(
+            f"{idx}. {_list_item_to_markdown(item)}"
+            for idx, item in enumerate(content, 1)
+        )
     if btype == "blockquote":
         inner = "\n".join(_block_to_markdown(b) for b in content)
         return "\n".join(f"> {line}" for line in inner.split("\n"))
@@ -153,7 +174,9 @@ def _inline_to_markdown(nodes: list[dict[str, Any]]) -> str:
             text = f"**{text}**"
         if "em" in marks:
             text = f"*{text}*"
-        link_mark = next((m for m in node.get("marks", []) if m.get("type") == "link"), None)
+        link_mark = next(
+            (m for m in node.get("marks", []) if m.get("type") == "link"), None
+        )
         if link_mark:
             href = link_mark.get("attrs", {}).get("href", "")
             text = f"[{text}]({href})"
@@ -192,7 +215,9 @@ def _inline_to_adf(text: str) -> list[dict[str, Any]]:
                 }
             )
         else:
-            tokens.append({"type": "text", "text": match.group(1), "marks": [{"type": mark}]})
+            tokens.append(
+                {"type": "text", "text": match.group(1), "marks": [{"type": mark}]}
+            )
 
         remaining = remaining[end:]
 

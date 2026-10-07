@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from harness import cli
 from harness.workspace import config_path, find_workspace
 

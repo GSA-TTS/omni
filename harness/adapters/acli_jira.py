@@ -11,6 +11,7 @@ labels/assignee are ever edited.
 has no flag for Sprint/Fix Version, so GitHub milestones are encoded as a
 prefixed Jira label (see config.milestone_label).
 """
+
 from __future__ import annotations
 
 import re
@@ -48,7 +49,16 @@ class AcliJiraAdapter(BaseIssueAdapter):
             return self._view_cache[issue_id]
         try:
             data = self._run_cli(
-                [self.acli_bin, "jira", "workitem", "view", issue_id, "--fields", _VIEW_FIELDS, "--json"],
+                [
+                    self.acli_bin,
+                    "jira",
+                    "workitem",
+                    "view",
+                    issue_id,
+                    "--fields",
+                    _VIEW_FIELDS,
+                    "--json",
+                ],
             )
         except AdapterError:
             data = None
@@ -63,16 +73,22 @@ class AcliJiraAdapter(BaseIssueAdapter):
     def get_issue(self, issue_id: str) -> CanonicalIssue:
         data = self._view(issue_id)
         if data is None:
-            raise AdapterError(f"Jira workitem {issue_id} does not exist or is not visible")
+            raise AdapterError(
+                f"Jira workitem {issue_id} does not exist or is not visible"
+            )
         fields = data.get("fields", {})
-        status_cat = ((fields.get("status") or {}).get("statusCategory") or {}).get("name")
+        status_cat = ((fields.get("status") or {}).get("statusCategory") or {}).get(
+            "name"
+        )
         assignee = fields.get("assignee") or {}
         return CanonicalIssue(
             title=fields.get("summary", ""),
             body_markdown="",  # description is intentionally never read (see module docstring)
             status="CLOSED" if status_cat == "Done" else "OPEN",
             labels=list(fields.get("labels") or []),
-            assignees=[assignee["emailAddress"]] if assignee.get("emailAddress") else [],
+            assignees=[assignee["emailAddress"]]
+            if assignee.get("emailAddress")
+            else [],
         )
 
     def status_category(self, issue_id: str) -> str | None:
@@ -80,7 +96,9 @@ class AcliJiraAdapter(BaseIssueAdapter):
         data = self._view(issue_id)
         if data is None:
             return None
-        return (((data.get("fields") or {}).get("status") or {}).get("statusCategory") or {}).get("name")
+        return (
+            ((data.get("fields") or {}).get("status") or {}).get("statusCategory") or {}
+        ).get("name")
 
     def labels(self, issue_id: str) -> set[str]:
         data = self._view(issue_id)
@@ -96,11 +114,13 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     def list_issues(self, base_url: str, query: IssueQuery) -> list[OpenIssue]:
         """List Jira work matching normalized relationship and content filters."""
-        people = []
+        people: list[str] = []
         for relationship in query.relationships:
             field = "reporter" if relationship == "authored" else "assignee"
             people.extend(
-                f"{field} = currentUser()" if user == "@me" else f'{field} = "{_jql(user)}"'
+                f"{field} = currentUser()"
+                if user == "@me"
+                else f'{field} = "{_jql(user)}"'
                 for user in query.users
             )
         clauses = [f'project = "{_jql(self.project_key)}"', f"({' OR '.join(people)})"]
@@ -114,20 +134,38 @@ class AcliJiraAdapter(BaseIssueAdapter):
         jql = " AND ".join(clauses)
         data = self._run_cli(
             [
-                self.acli_bin, "jira", "workitem", "search", "--jql", jql,
-                "--fields", "key,summary,description,labels", "--limit", str(query.limit), "--json",
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "search",
+                "--jql",
+                jql,
+                "--fields",
+                "key,summary,description,labels",
+                "--limit",
+                str(query.limit),
+                "--json",
             ]
         )
         items = data.get("issues", []) if isinstance(data, dict) else data
         if not isinstance(items, list):
-            raise AdapterError(f"Unexpected Jira workitem search output for {self.project_key}")
+            raise AdapterError(
+                f"Unexpected Jira workitem search output for {self.project_key}"
+            )
         return [
             OpenIssue(
                 provider="jira-mod",
                 issue_id=str(item.get("key") or ""),
-                title=(item.get("fields") or {}).get("summary") or item.get("summary") or "",
-                body=_adf_text((item.get("fields") or {}).get("description") or item.get("description")),
-                labels=tuple((item.get("fields") or {}).get("labels") or item.get("labels") or []),
+                title=(item.get("fields") or {}).get("summary")
+                or item.get("summary")
+                or "",
+                body=_adf_text(
+                    (item.get("fields") or {}).get("description")
+                    or item.get("description")
+                ),
+                labels=tuple(
+                    (item.get("fields") or {}).get("labels") or item.get("labels") or []
+                ),
                 url=f"{base_url.rstrip('/')}/browse/{item.get('key')}",
             )
             for item in items
@@ -200,13 +238,24 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     def list_comments(self, issue_id: str) -> list[dict]:
         data = self._run_cli(
-            [self.acli_bin, "jira", "workitem", "comment", "list", "--key", issue_id, "--json"],
+            [
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "comment",
+                "list",
+                "--key",
+                issue_id,
+                "--json",
+            ],
         )
         if isinstance(data, dict):
             comments = data.get("comments")
             if isinstance(comments, list):
                 return comments
-        raise AdapterError(f"Invalid comment list response for Jira workitem {issue_id}")
+        raise AdapterError(
+            f"Invalid comment list response for Jira workitem {issue_id}"
+        )
 
     def upsert_sync_comment(
         self, issue_id: str, body: str, *, dry_run: bool = False
@@ -220,18 +269,37 @@ class AcliJiraAdapter(BaseIssueAdapter):
         existing = find_sync_comment(self.list_comments(issue_id))
 
         if dry_run:
-            return True, f"dry-run: comment {'update' if existing else 'create'} on {issue_id}"
+            return (
+                True,
+                f"dry-run: comment {'update' if existing else 'create'} on {issue_id}",
+            )
 
         if existing:
             cmd = [
-                self.acli_bin, "jira", "workitem", "comment", "update",
-                "--key", issue_id, "--id", existing["id"], "--body", body,
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "comment",
+                "update",
+                "--key",
+                issue_id,
+                "--id",
+                existing["id"],
+                "--body",
+                body,
             ]
             verb = "updated"
         else:
             cmd = [
-                self.acli_bin, "jira", "workitem", "comment", "create",
-                "--key", issue_id, "--body", body,
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "comment",
+                "create",
+                "--key",
+                issue_id,
+                "--body",
+                body,
             ]
             verb = "created"
 
@@ -250,7 +318,9 @@ def find_sync_comment(comments: list[dict]) -> dict | None:
         if str(comment.get("body") or "").lstrip().startswith(SYNC_COMMENT_MARKER)
     ]
     if len(matches) > 1:
-        raise AdapterError("Multiple managed Jira sync comments found; refusing an ambiguous update")
+        raise AdapterError(
+            "Multiple managed Jira sync comments found; refusing an ambiguous update"
+        )
     return matches[0] if matches else None
 
 
@@ -274,7 +344,9 @@ def _jql(value: str) -> str:
 
 def strip_sync_timestamp(body: str) -> str:
     """Drop the leading marker/timestamp line so bodies compare for substantive equality."""
-    return re.sub(rf"^{re.escape(SYNC_COMMENT_MARKER)}.*$", "", body, count=1, flags=re.M).strip()
+    return re.sub(
+        rf"^{re.escape(SYNC_COMMENT_MARKER)}.*$", "", body, count=1, flags=re.M
+    ).strip()
 
 
 def build_sync_comment(gh_items: list[dict]) -> str:
@@ -282,7 +354,10 @@ def build_sync_comment(gh_items: list[dict]) -> str:
     ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     ordered = sorted(
         gh_items,
-        key=lambda i: (0 if i.get("state") == "open" else 1, -_iso_to_epoch(i.get("updated_at"))),
+        key=lambda i: (
+            0 if i.get("state") == "open" else 1,
+            -_iso_to_epoch(i.get("updated_at")),
+        ),
     )
     primary = ordered[0]
 

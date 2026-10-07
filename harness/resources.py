@@ -1,4 +1,5 @@
 """Access runtime data from an installed package or a source checkout."""
+
 from __future__ import annotations
 
 from importlib.resources import files

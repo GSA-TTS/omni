@@ -1,6 +1,7 @@
 """Adapter wrapping the `gh` CLI, supporting both github.com and GitHub
 Enterprise Server (e.g. github.helix.gsa.gov) via the GH_HOST env var.
 """
+
 from __future__ import annotations
 
 from harness.adapters.base import AdapterError, BaseIssueAdapter
@@ -21,7 +22,16 @@ class GitHubAdapter(BaseIssueAdapter):
 
     def get_issue(self, issue_id: str) -> CanonicalIssue:
         data = self._run_cli(
-            ["gh", "issue", "view", issue_id, "-R", f"{self.host}/{self.repo}", "--json", _ISSUE_FIELDS],
+            [
+                "gh",
+                "issue",
+                "view",
+                issue_id,
+                "-R",
+                f"{self.host}/{self.repo}",
+                "--json",
+                _ISSUE_FIELDS,
+            ],
             env_overrides=self._env(),
         )
         if not isinstance(data, dict):
@@ -41,9 +51,19 @@ class GitHubAdapter(BaseIssueAdapter):
         for relationship in query.relationships:
             for user in query.users:
                 argv = [
-                    "gh", "issue", "list", "-R", f"{self.host}/{self.repo}",
-                    "--state", query.state, role_flags[relationship], user,
-                    "--limit", str(query.limit), "--json", "number,title,body,labels,url",
+                    "gh",
+                    "issue",
+                    "list",
+                    "-R",
+                    f"{self.host}/{self.repo}",
+                    "--state",
+                    query.state,
+                    role_flags[relationship],
+                    user,
+                    "--limit",
+                    str(query.limit),
+                    "--json",
+                    "number,title,body,labels,url",
                 ]
                 for label in query.labels:
                     argv += ["--label", label]
@@ -51,7 +71,9 @@ class GitHubAdapter(BaseIssueAdapter):
                     argv += ["--search", query.search]
                 data = self._run_cli(argv, env_overrides=self._env())
                 if not isinstance(data, list):
-                    raise AdapterError(f"Unexpected gh issue list output for {self.repo}")
+                    raise AdapterError(
+                        f"Unexpected gh issue list output for {self.repo}"
+                    )
                 for item in data:
                     found[int(item["number"])] = item
         return [
@@ -61,7 +83,8 @@ class GitHubAdapter(BaseIssueAdapter):
                 title=item.get("title") or "",
                 body=item.get("body") or "",
                 labels=tuple(label["name"] for label in item.get("labels", [])),
-                url=item.get("url") or f"https://{self.host}/{self.repo}/issues/{number}",
+                url=item.get("url")
+                or f"https://{self.host}/{self.repo}/issues/{number}",
             )
             for number, item in sorted(found.items())
         ]
@@ -117,22 +140,43 @@ class GitHubAdapter(BaseIssueAdapter):
 
     def add_comment(self, issue_id: str, body: str) -> None:
         self._run_cli(
-            ["gh", "issue", "comment", issue_id, "-R", f"{self.host}/{self.repo}", "--body", body],
+            [
+                "gh",
+                "issue",
+                "comment",
+                issue_id,
+                "-R",
+                f"{self.host}/{self.repo}",
+                "--body",
+                body,
+            ],
             env_overrides=self._env(),
             parse_json=False,
         )
 
     def create_pull_request(
-        self, title: str, body: str, base: str, head: str, draft: bool = False,
+        self,
+        title: str,
+        body: str,
+        base: str,
+        head: str,
+        draft: bool = False,
         assignees: list[str] | None = None,
     ) -> str:
         argv = [
-            "gh", "pr", "create",
-            "-R", f"{self.host}/{self.repo}",
-            "--base", base,
-            "--head", head,
-            "--title", title,
-            "--body", body,
+            "gh",
+            "pr",
+            "create",
+            "-R",
+            f"{self.host}/{self.repo}",
+            "--base",
+            base,
+            "--head",
+            head,
+            "--title",
+            title,
+            "--body",
+            body,
         ]
         if draft:
             argv.append("--draft")

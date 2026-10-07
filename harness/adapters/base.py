@@ -1,4 +1,5 @@
 """Abstract base class all provider adapters (GitHub, GitLab, Jira) implement."""
+
 from __future__ import annotations
 
 import json
@@ -44,7 +45,7 @@ class CliMetrics:
 class BaseIssueAdapter(ABC):
     """Common interface for wrapping a provider CLI as a canonical issue source."""
 
-    metrics: "CliMetrics | None" = None
+    metrics: CliMetrics | None = None
 
     @abstractmethod
     def get_issue(self, issue_id: str) -> CanonicalIssue:
@@ -97,7 +98,9 @@ class BaseIssueAdapter(ABC):
                 timeout=60,
             )
         except subprocess.CalledProcessError as exc:
-            raise AdapterError(f"Command failed ({_command_label(argv)}), exit {exc.returncode}") from exc
+            raise AdapterError(
+                f"Command failed ({_command_label(argv)}), exit {exc.returncode}"
+            ) from exc
         except subprocess.TimeoutExpired as exc:
             raise AdapterError(f"Command timed out: {_command_label(argv)}") from exc
         finally:

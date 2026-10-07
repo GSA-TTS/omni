@@ -28,7 +28,9 @@ _WORKITEM = {
 
 class TestAcliJiraAdapter:
     def test_get_issue_never_requests_description(self, mocker):
-        run_mock = mocker.patch("subprocess.run", return_value=_mock_completed(json.dumps(_WORKITEM)))
+        run_mock = mocker.patch(
+            "subprocess.run", return_value=_mock_completed(json.dumps(_WORKITEM))
+        )
         adapter = AcliJiraAdapter("acli", "FPDF")
         issue = adapter.get_issue("FPDF-402")
 
@@ -39,7 +41,12 @@ class TestAcliJiraAdapter:
         assert "description" not in " ".join(fields_arg)
 
     def test_done_status_category_maps_to_closed(self, mocker):
-        done = {"fields": {**_WORKITEM["fields"], "status": {"statusCategory": {"name": "Done"}}}}
+        done = {
+            "fields": {
+                **_WORKITEM["fields"],
+                "status": {"statusCategory": {"name": "Done"}},
+            }
+        }
         mocker.patch("subprocess.run", return_value=_mock_completed(json.dumps(done)))
         adapter = AcliJiraAdapter("acli", "FPDF")
         assert adapter.get_issue("FPDF-402").status == "CLOSED"
@@ -47,7 +54,9 @@ class TestAcliJiraAdapter:
     def test_edit_never_includes_description_flag(self, mocker):
         run_mock = mocker.patch("subprocess.run", return_value=_mock_completed(""))
         adapter = AcliJiraAdapter("acli", "FPDF")
-        ok, _ = adapter.edit("FPDF-402", assignee="dev.user@agency.gov", add_labels=["bug"])
+        ok, _ = adapter.edit(
+            "FPDF-402", assignee="dev.user@agency.gov", add_labels=["bug"]
+        )
 
         assert ok
         argv = run_mock.call_args.args[0]
@@ -97,7 +106,9 @@ class TestAcliJiraAdapter:
     def test_list_comments_fails_closed_on_cli_error(self, mocker):
         mocker.patch(
             "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, ["acli"], stderr="unauthorized"),
+            side_effect=subprocess.CalledProcessError(
+                1, ["acli"], stderr="unauthorized"
+            ),
         )
         adapter = AcliJiraAdapter("acli", "FPDF")
         with pytest.raises(AdapterError, match="Command failed"):
@@ -131,13 +142,25 @@ class TestSyncComment:
             find_sync_comment(comments)
 
     def test_strip_sync_timestamp_removes_marker_line(self):
-        body = "[github-sync] Last synced from GitHub: 2026-01-01T00:00:00Z\nState: open"
+        body = (
+            "[github-sync] Last synced from GitHub: 2026-01-01T00:00:00Z\nState: open"
+        )
         assert strip_sync_timestamp(body) == "State: open"
 
     def test_build_sync_comment_lists_items_primary_first(self):
         items = [
-            {"number": 2, "state": "closed", "html_url": "u2", "updated_at": "2026-01-01T00:00:00Z"},
-            {"number": 1, "state": "open", "html_url": "u1", "updated_at": "2026-02-01T00:00:00Z"},
+            {
+                "number": 2,
+                "state": "closed",
+                "html_url": "u2",
+                "updated_at": "2026-01-01T00:00:00Z",
+            },
+            {
+                "number": 1,
+                "state": "open",
+                "html_url": "u1",
+                "updated_at": "2026-02-01T00:00:00Z",
+            },
         ]
         body = build_sync_comment(items)
         assert body.startswith("[github-sync]")

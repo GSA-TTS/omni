@@ -5,6 +5,7 @@ Reads via `gh api --paginate` (REST) rather than GraphQL so the project-board
 GraphQL quota is untouched. Groups issues/PRs by the `<KEY>-###` reference in
 their title so a single tracker ticket can gather all its linked items.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,7 +41,9 @@ class GitHubRestAdapter:
                 timeout=180,
             )
         except subprocess.CalledProcessError as exc:
-            raise AdapterError(f"gh api failed for {self.org}/{repo}, exit {exc.returncode}") from exc
+            raise AdapterError(
+                f"gh api failed for {self.org}/{repo}, exit {exc.returncode}"
+            ) from exc
         except subprocess.TimeoutExpired as exc:
             raise AdapterError(f"gh api timed out for {self.org}/{repo}") from exc
 
@@ -65,14 +68,28 @@ class GitHubRestAdapter:
                 grouped.setdefault(key, []).append(item)
         return grouped
 
-    def add_assignee(self, repo: str, number: int, login: str, dry_run: bool = False) -> tuple[bool, str]:
-        cmd = ["gh", "issue", "edit", str(number), "--repo", f"{self.org}/{repo}", "--add-assignee", login]
+    def add_assignee(
+        self, repo: str, number: int, login: str, dry_run: bool = False
+    ) -> tuple[bool, str]:
+        cmd = [
+            "gh",
+            "issue",
+            "edit",
+            str(number),
+            "--repo",
+            f"{self.org}/{repo}",
+            "--add-assignee",
+            login,
+        ]
         if dry_run:
             return True, f"dry-run: {' '.join(cmd)}"
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         except subprocess.CalledProcessError as exc:
-            return False, f"gh issue edit failed for {self.org}/{repo}, exit {exc.returncode}"
+            return (
+                False,
+                f"gh issue edit failed for {self.org}/{repo}, exit {exc.returncode}",
+            )
         return True, f"gh: assigned {login}"
 
 
@@ -80,7 +97,10 @@ def pick_primary(gh_items: list[dict]) -> dict:
     """Choose the canonical GitHub item: any open beats any closed; newest wins within a bucket."""
     return sorted(
         gh_items,
-        key=lambda i: (0 if i.get("state") == "open" else 1, -_iso_to_epoch(i.get("updated_at"))),
+        key=lambda i: (
+            0 if i.get("state") == "open" else 1,
+            -_iso_to_epoch(i.get("updated_at")),
+        ),
     )[0]
 
 

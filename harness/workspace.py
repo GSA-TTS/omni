@@ -4,6 +4,7 @@ The CLI may be invoked from any directory. Config is discovered by walking up
 from the current working directory looking for the committed
 ``omni-project.toml`` marker, falling back to the CWD for a fresh ``init``.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +13,7 @@ WORKSPACE_MARKER = "omni-project.toml"
 
 # Files whose absence should warn (the ones holding real, local-only data).
 LOCAL_ONLY = ("users.toml", ".env")
+
 
 def find_workspace(start: Path | None = None) -> Path:
     """Return the directory holding omni-sync config, searching CWD upward.

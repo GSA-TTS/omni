@@ -57,7 +57,9 @@ def test_blockquote_round_trip():
 
 
 _SAFE_TEXT = st.text(
-    alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\n\r*`[]<>#>-"),
+    alphabet=st.characters(
+        blacklist_categories=("Cs",), blacklist_characters="\n\r*`[]<>#>-"
+    ),
     min_size=1,
     max_size=40,
 ).filter(lambda s: s.strip() != "")

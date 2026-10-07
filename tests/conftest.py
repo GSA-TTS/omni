@@ -34,10 +34,16 @@ def jira_issue_json() -> dict:
                 "type": "doc",
                 "version": 1,
                 "content": [
-                    {"type": "heading", "attrs": {"level": 3}, "content": [{"type": "text", "text": "Summary"}]},
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 3},
+                        "content": [{"type": "text", "text": "Summary"}],
+                    },
                     {
                         "type": "paragraph",
-                        "content": [{"type": "text", "text": "Update the OIDC endpoints."}],
+                        "content": [
+                            {"type": "text", "text": "Update the OIDC endpoints."}
+                        ],
                     },
                 ],
             },

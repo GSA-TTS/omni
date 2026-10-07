@@ -16,7 +16,9 @@ _ROSTER = UserRoster(
 
 
 def test_username_for_target_per_host():
-    assert _ROSTER.username_for_target("gh-helix", "dev.user@agency.gov") == "ghes-login"
+    assert (
+        _ROSTER.username_for_target("gh-helix", "dev.user@agency.gov") == "ghes-login"
+    )
     assert _ROSTER.username_for_target("gh-tts", "dev.user@agency.gov") == "gh-login"
     assert _ROSTER.username_for_target("gl-cg", "dev.user@agency.gov") == "gitlab-login"
 
@@ -52,7 +54,10 @@ def test_resolve_assignee_unmapped_email_is_none():
 
 def test_resolve_issue_user_keeps_current_identity_and_jira_email():
     assert _ROSTER.resolve_issue_user("gh-tts", "@me") == "@me"
-    assert _ROSTER.resolve_issue_user("jira-mod", "dev.user@agency.gov") == "dev.user@agency.gov"
+    assert (
+        _ROSTER.resolve_issue_user("jira-mod", "dev.user@agency.gov")
+        == "dev.user@agency.gov"
+    )
 
 
 def test_resolve_issue_user_maps_email_for_host():

@@ -4,6 +4,7 @@ Kept separate from models.py's low-level regex helpers so adapters can apply
 provider-specific sanitization (e.g. stripping Jira ADF panel wrappers) without
 touching the canonical model.
 """
+
 from __future__ import annotations
 
 from harness.models import parse_anchor, strip_anchor

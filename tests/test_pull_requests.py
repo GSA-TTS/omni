@@ -29,7 +29,9 @@ class TestGitHubPR:
 
     def test_draft_flag(self, mocker):
         run_mock = mocker.patch("subprocess.run", return_value=_ok("url\n"))
-        GitHubAdapter("github.com", "o/r").create_pull_request("T", "B", base="main", head="h", draft=True)
+        GitHubAdapter("github.com", "o/r").create_pull_request(
+            "T", "B", base="main", head="h", draft=True
+        )
         assert "--draft" in run_mock.call_args.args[0]
 
     def test_assignees_passed(self, mocker):

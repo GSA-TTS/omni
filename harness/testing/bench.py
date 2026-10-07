@@ -6,6 +6,7 @@ The headline guard this exists to protect: the acli Jira adapter must make
 exactly ONE `workitem view` call per key (it previously made 4; see
 skills/omni-sync/known-failures.md and the AcliJiraAdapter view cache).
 """
+
 from __future__ import annotations
 
 import statistics
@@ -34,7 +35,9 @@ class OpMetric:
 
 def render_matrix(metrics: list[OpMetric]) -> str:
     """Render a provider × operation matrix of call counts and latency."""
-    header = f"{'provider':<16}{'operation':<16}{'calls':>6}{'p50(ms)':>10}{'p95(ms)':>10}"
+    header = (
+        f"{'provider':<16}{'operation':<16}{'calls':>6}{'p50(ms)':>10}{'p95(ms)':>10}"
+    )
     lines = [header, "-" * len(header)]
     for m in metrics:
         lines.append(

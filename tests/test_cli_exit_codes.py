@@ -24,7 +24,9 @@ class _IssueAdapter:
 
 def test_create_exits_nonzero_after_partial_failure(mocker):
     adapters = {"ok": _IssueAdapter(), "bad": _IssueAdapter(fail=True)}
-    mocker.patch.object(cli, "_resolve_adapter", side_effect=lambda target: adapters[target])
+    mocker.patch.object(
+        cli, "_resolve_adapter", side_effect=lambda target: adapters[target]
+    )
     mocker.patch.object(cli, "_resolve_assignees", return_value=[])
 
     with pytest.raises(typer.Exit) as raised:
@@ -35,7 +37,9 @@ def test_create_exits_nonzero_after_partial_failure(mocker):
 
 def test_pr_exits_nonzero_after_partial_failure(mocker):
     adapters = {"ok": _IssueAdapter(), "bad": _IssueAdapter(fail=True)}
-    mocker.patch.object(cli, "_resolve_adapter", side_effect=lambda target: adapters[target])
+    mocker.patch.object(
+        cli, "_resolve_adapter", side_effect=lambda target: adapters[target]
+    )
     mocker.patch.object(cli, "_resolve_assignees", return_value=[])
 
     with pytest.raises(typer.Exit) as raised:
@@ -62,7 +66,12 @@ def test_github_to_jira_sync_exits_nonzero_after_ticket_failure(mocker, tmp_path
         "sync_jira_from_github",
         side_effect=[
             {"gh_number": 1, "linked_count": 1, "actions": ["updated"], "errors": []},
-            {"gh_number": 1, "linked_count": 1, "actions": [], "errors": ["write failed"]},
+            {
+                "gh_number": 1,
+                "linked_count": 1,
+                "actions": [],
+                "errors": ["write failed"],
+            },
         ],
     )
 
@@ -91,7 +100,12 @@ def test_jira_to_github_backfill_exits_nonzero_after_write_failure(mocker, tmp_p
     mocker.patch.object(
         cli,
         "plan_backfill_github_from_jira",
-        return_value={"key": "TEST-1", "gh_number": 1, "action": "backfill", "login": "user"},
+        return_value={
+            "key": "TEST-1",
+            "gh_number": 1,
+            "action": "backfill",
+            "login": "user",
+        },
     )
 
     with pytest.raises(typer.Exit) as raised:

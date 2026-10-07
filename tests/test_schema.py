@@ -36,19 +36,27 @@ def test_project_schema_is_available_as_runtime_resource():
 
 
 def test_board_urls_must_be_absolute_and_end_with_slash():
-    valid = _cfg(_VALID + '\n[board]\ngh_tts_url = "https://github.com/o/r/issues/#TICKET#"\n')
+    valid = _cfg(
+        _VALID + '\n[board]\ngh_tts_url = "https://github.com/o/r/issues/#TICKET#"\n'
+    )
     validate_config(valid)
-    invalid = _cfg(_VALID + '\n[board]\ngh_tts_url = "https://github.com/o/r/issues/"\n')
+    invalid = _cfg(
+        _VALID + '\n[board]\ngh_tts_url = "https://github.com/o/r/issues/"\n'
+    )
     with pytest.raises(SystemExit, match="does not match"):
         validate_config(invalid)
-    insecure = _cfg(_VALID + '\n[board]\ngh_tts_url = "http://github.com/o/r/issues/#TICKET#"\n')
+    insecure = _cfg(
+        _VALID + '\n[board]\ngh_tts_url = "http://github.com/o/r/issues/#TICKET#"\n'
+    )
     with pytest.raises(SystemExit, match="does not match"):
         validate_config(insecure)
 
 
 def test_unsupported_schema_version_exits():
     with pytest.raises(SystemExit, match="schema_version"):
-        validate_config(_cfg(_VALID.replace("schema_version = 1", "schema_version = 99")))
+        validate_config(
+            _cfg(_VALID.replace("schema_version = 1", "schema_version = 99"))
+        )
 
 
 def test_missing_schema_version_exits():
@@ -83,7 +91,9 @@ repos = []
 
 
 def test_gitlab_host_and_project_are_supported():
-    cfg = _cfg(_VALID + '\n[gitlab]\nhost = "gitlab.example"\nproject = "group/project"\n')
+    cfg = _cfg(
+        _VALID + '\n[gitlab]\nhost = "gitlab.example"\nproject = "group/project"\n'
+    )
     validate_config(cfg)
 
 

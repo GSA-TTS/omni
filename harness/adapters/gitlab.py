@@ -1,6 +1,7 @@
 """Adapter wrapping the `glab` CLI, targeting GitLab instances such as
 workshop.cloud.gov via the GITLAB_HOST env var.
 """
+
 from __future__ import annotations
 
 from urllib.parse import quote, urlencode
@@ -47,9 +48,17 @@ class GitLabAdapter(BaseIssueAdapter):
                     "per_page": query.limit,
                 }
                 if user == "@me":
-                    params["scope"] = "created_by_me" if relationship == "authored" else "assigned_to_me"
+                    params["scope"] = (
+                        "created_by_me"
+                        if relationship == "authored"
+                        else "assigned_to_me"
+                    )
                 else:
-                    params["author_username" if relationship == "authored" else "assignee_username"] = user
+                    params[
+                        "author_username"
+                        if relationship == "authored"
+                        else "assignee_username"
+                    ] = user
                 if query.labels:
                     params["labels"] = ",".join(query.labels)
                 if query.search:
@@ -59,7 +68,9 @@ class GitLabAdapter(BaseIssueAdapter):
                     env_overrides=self._env(),
                 )
                 if not isinstance(data, list):
-                    raise AdapterError(f"Unexpected GitLab issue list output for {self.repo}")
+                    raise AdapterError(
+                        f"Unexpected GitLab issue list output for {self.repo}"
+                    )
                 for item in data:
                     found[int(item["iid"])] = item
         return [
@@ -69,7 +80,8 @@ class GitLabAdapter(BaseIssueAdapter):
                 title=item.get("title") or "",
                 body=item.get("description") or "",
                 labels=tuple(item.get("labels") or []),
-                url=item.get("web_url") or f"https://{self.host}/{self.repo}/-/issues/{iid}",
+                url=item.get("web_url")
+                or f"https://{self.host}/{self.repo}/-/issues/{iid}",
             )
             for iid, item in sorted(found.items())
         ]
@@ -127,16 +139,28 @@ class GitLabAdapter(BaseIssueAdapter):
         )
 
     def create_pull_request(
-        self, title: str, body: str, base: str, head: str, draft: bool = False,
+        self,
+        title: str,
+        body: str,
+        base: str,
+        head: str,
+        draft: bool = False,
         assignees: list[str] | None = None,
     ) -> str:
         argv = [
-            "glab", "mr", "create",
-            "-R", self.repo,
-            "--source-branch", head,
-            "--target-branch", base,
-            "--title", title,
-            "--description", body,
+            "glab",
+            "mr",
+            "create",
+            "-R",
+            self.repo,
+            "--source-branch",
+            head,
+            "--target-branch",
+            base,
+            "--title",
+            title,
+            "--description",
+            body,
             "--yes",  # skip interactive prompts
         ]
         if draft:

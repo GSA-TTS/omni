@@ -9,6 +9,7 @@ Usage:
     uv run python -m harness.testing.live_probe gh-helix <owner>/<repo>
     uv run python -m harness.testing.live_probe gl-cg <group>/<project>
 """
+
 from __future__ import annotations
 
 import sys
@@ -27,11 +28,13 @@ _BUILDERS = {
 
 def run(target: str, repo: str) -> int:
     if target not in _BUILDERS:
-        print(f"unknown target {target}; valid: {', '.join(_BUILDERS)}", file=sys.stderr)
+        print(
+            f"unknown target {target}; valid: {', '.join(_BUILDERS)}", file=sys.stderr
+        )
         return 2
     adapter = _BUILDERS[target](repo)
 
-    print(f"id\tresult\tnote")
+    print("id\tresult\tnote")
     for case in EDGE_CASES:
         issue = CanonicalIssue.create_new(f"[omni-probe] {case.id}", case.body)
         try:

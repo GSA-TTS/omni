@@ -1,8 +1,9 @@
 """Render normalized provider issues as separate Mermaid Kanban boards."""
+
 from __future__ import annotations
 
-import re
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import urlparse
@@ -32,13 +33,34 @@ TARGET_RESOURCE_ENV = {
 }
 
 
-def collect_boards(cfg: dict, roster: UserRoster, query: IssueQuery, targets: tuple[str, ...]) -> tuple[list[IssueBoard], list[str]]:
+def collect_boards(
+    cfg: dict, roster: UserRoster, query: IssueQuery, targets: tuple[str, ...]
+) -> tuple[list[IssueBoard], list[str]]:
     """Query selected providers and return boards plus sanitized failures."""
     board_urls = cfg.get("board", {})
     definitions = [
-        ("GitHub.com", "github_com", "gh-tts", "gh_tts_url", os.environ.get("GITHUB_PUBLIC_HOST", "github.com")),
-        ("GitHub Helix", "github_helix", "gh-helix", "gh_helix_url", os.environ.get("HELIX_GH_HOST", "github.helix.gsa.gov")),
-        ("GitLab", "gitlab", "gl-cg", "gl_cg_url", cfg.get("gitlab", {}).get("host") or os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov")),
+        (
+            "GitHub.com",
+            "github_com",
+            "gh-tts",
+            "gh_tts_url",
+            os.environ.get("GITHUB_PUBLIC_HOST", "github.com"),
+        ),
+        (
+            "GitHub Helix",
+            "github_helix",
+            "gh-helix",
+            "gh_helix_url",
+            os.environ.get("HELIX_GH_HOST", "github.helix.gsa.gov"),
+        ),
+        (
+            "GitLab",
+            "gitlab",
+            "gl-cg",
+            "gl_cg_url",
+            cfg.get("gitlab", {}).get("host")
+            or os.environ.get("CLOUDGOV_GLAB_HOST", "workshop.cloud.gov"),
+        ),
     ]
     boards: list[IssueBoard] = []
     errors: list[str] = []
@@ -46,26 +68,77 @@ def collect_boards(cfg: dict, roster: UserRoster, query: IssueQuery, targets: tu
         if target not in targets:
             continue
         ticket_url = board_urls.get(url_key)
-        resource = os.environ.get(TARGET_RESOURCE_ENV[target]) or _resource_from_ticket_url(target, ticket_url) or _resource_from_config(target, cfg)
+        resource = (
+            os.environ.get(TARGET_RESOURCE_ENV[target])
+            or _resource_from_ticket_url(target, ticket_url)
+            or _resource_from_config(target, cfg)
+        )
         if not resource:
-            _failed_board(boards, errors, name, slug, ticket_url or f"https://{host}/#TICKET#", target, f"set {TARGET_RESOURCE_ENV[target]}")
+            _failed_board(
+                boards,
+                errors,
+                name,
+                slug,
+                ticket_url or f"https://{host}/#TICKET#",
+                target,
+                f"set {TARGET_RESOURCE_ENV[target]}",
+            )
             continue
-        adapter = GitLabAdapter(host, resource) if target == "gl-cg" else GitHubAdapter(host, resource)
-        derived = f"https://{host}/{resource}/-/issues/#TICKET#" if target == "gl-cg" else f"https://{host}/{resource}/issues/#TICKET#"
-        _query_board(boards, errors, name, slug, target, ticket_url or derived, adapter, roster, query)
+        adapter = (
+            GitLabAdapter(host, resource)
+            if target == "gl-cg"
+            else GitHubAdapter(host, resource)
+        )
+        derived = (
+            f"https://{host}/{resource}/-/issues/#TICKET#"
+            if target == "gl-cg"
+            else f"https://{host}/{resource}/issues/#TICKET#"
+        )
+        _query_board(
+            boards,
+            errors,
+            name,
+            slug,
+            target,
+            ticket_url or derived,
+            adapter,
+            roster,
+            query,
+        )
     if "jira-mod" in targets:
         _collect_jira(boards, errors, cfg, board_urls, roster, query)
     return boards, errors
 
 
-def _query_board(boards, errors, name, slug, target, ticket_url, adapter, roster, query) -> None:
+def _query_board(
+    boards, errors, name, slug, target, ticket_url, adapter, roster, query
+) -> None:
     users = tuple(roster.resolve_issue_user(target, value) for value in query.users)
     if any(value is None for value in users):
-        _failed_board(boards, errors, name, slug, ticket_url, target, "one or more email users have no roster mapping")
+        _failed_board(
+            boards,
+            errors,
+            name,
+            slug,
+            ticket_url,
+            target,
+            "one or more email users have no roster mapping",
+        )
         return
     try:
-        issues = adapter.list_issues(IssueQuery(query.relationships, users, query.state, query.labels, query.search, query.limit))
-        boards.append(IssueBoard(name, slug, ticket_url, _with_ticket_url(issues, ticket_url)))
+        issues = adapter.list_issues(
+            IssueQuery(
+                query.relationships,
+                users,
+                query.state,
+                query.labels,
+                query.search,
+                query.limit,
+            )
+        )
+        boards.append(
+            IssueBoard(name, slug, ticket_url, _with_ticket_url(issues, ticket_url))
+        )
     except AdapterError as exc:
         _failed_board(boards, errors, name, slug, ticket_url, target, str(exc))
 
@@ -73,16 +146,30 @@ def _query_board(boards, errors, name, slug, target, ticket_url, adapter, roster
 def _collect_jira(boards, errors, cfg, board_urls, roster, query) -> None:
     base_url = cfg["jira"].get("base_url") or os.environ.get("JIRA_INSTANCE_URL")
     if not base_url:
-        _failed_board(boards, errors, "Jira", "jira", "", "jira-mod", "set [jira].base_url or JIRA_INSTANCE_URL")
+        _failed_board(
+            boards,
+            errors,
+            "Jira",
+            "jira",
+            "",
+            "jira-mod",
+            "set [jira].base_url or JIRA_INSTANCE_URL",
+        )
         return
     project = os.environ.get("JIRA_MOD_PROJECT") or cfg["jira"]["project_key"]
     adapter = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), project)
-    ticket_url = board_urls.get("jira_mod_url", f"{base_url.rstrip('/')}/browse/#TICKET#")
+    ticket_url = board_urls.get(
+        "jira_mod_url", f"{base_url.rstrip('/')}/browse/#TICKET#"
+    )
     users = tuple(roster.resolve_issue_user("jira-mod", value) for value in query.users)
-    jira_query = IssueQuery(query.relationships, users, query.state, query.labels, query.search, query.limit)
+    jira_query = IssueQuery(
+        query.relationships, users, query.state, query.labels, query.search, query.limit
+    )
     try:
         issues = adapter.list_issues(base_url, jira_query)
-        boards.append(IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url)))
+        boards.append(
+            IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url))
+        )
     except AdapterError as exc:
         _failed_board(boards, errors, "Jira", "jira", ticket_url, "jira-mod", str(exc))
 
@@ -93,7 +180,17 @@ def _failed_board(boards, errors, name, slug, ticket_url, target, message) -> No
 
 
 def _with_ticket_url(issues: list[OpenIssue], ticket_url: str) -> tuple[OpenIssue, ...]:
-    return tuple(OpenIssue(issue.provider, issue.issue_id, issue.title, issue.body, issue.labels, ticket_url.replace("#TICKET#", issue.issue_id)) for issue in issues)
+    return tuple(
+        OpenIssue(
+            issue.provider,
+            issue.issue_id,
+            issue.title,
+            issue.body,
+            issue.labels,
+            ticket_url.replace("#TICKET#", issue.issue_id),
+        )
+        for issue in issues
+    )
 
 
 def _resource_from_ticket_url(target: str, ticket_url: str | None) -> str | None:
@@ -139,15 +236,32 @@ def render_boards(
 
 
 def _render_board(board: IssueBoard, body_limit: int) -> list[str]:
-    lines = [f"### {board.name}", "", f"Issues: **{len(board.issues)}**", "", "```mermaid", "---", "config:", "  kanban:"]
-    lines.extend([f"    ticketBaseUrl: '{_yaml_quote(board.ticket_url)}'", "---", "kanban"])
+    lines = [
+        f"### {board.name}",
+        "",
+        f"Issues: **{len(board.issues)}**",
+        "",
+        "```mermaid",
+        "---",
+        "config:",
+        "  kanban:",
+    ]
+    lines.extend(
+        [f"    ticketBaseUrl: '{_yaml_quote(board.ticket_url)}'", "---", "kanban"]
+    )
     lines.append(f"  {board.slug}[Open issues]")
     if board.error:
-        lines.append(f'    {board.slug}_error["Provider query failed: {_mermaid(board.error)}"]')
+        lines.append(
+            f'    {board.slug}_error["Provider query failed: {_mermaid(board.error)}"]'
+        )
     elif board.issues:
-        for index, issue in enumerate(sorted(board.issues, key=lambda item: item.issue_id)):
+        for index, issue in enumerate(
+            sorted(board.issues, key=lambda item: item.issue_id)
+        ):
             label = _card_label(issue, body_limit)
-            lines.append(f'    {board.slug}_{index}["{label}"]@{{ ticket: \'{_yaml_quote(issue.issue_id)}\' }}')
+            lines.append(
+                f"    {board.slug}_{index}[\"{label}\"]@{{ ticket: '{_yaml_quote(issue.issue_id)}' }}"
+            )
     else:
         lines.append(f'    {board.slug}_empty["No open authored or assigned issues"]')
     lines.extend(["```", "", "| Issue | Title | Labels | Body |", "|---|---|---|---|"])
@@ -168,17 +282,31 @@ def _render_board(board: IssueBoard, body_limit: int) -> list[str]:
 
 def _card_label(issue: OpenIssue, body_limit: int) -> str:
     labels = ", ".join(issue.labels) or "none"
-    parts = [issue.issue_id, issue.title, f"Labels: {labels}", _truncate(issue.body, body_limit)]
+    parts = [
+        issue.issue_id,
+        issue.title,
+        f"Labels: {labels}",
+        _truncate(issue.body, body_limit),
+    ]
     return "<br/>".join(_mermaid(part) for part in parts if part)
 
 
 def _truncate(value: str, limit: int) -> str:
     compact = re.sub(r"\s+", " ", value or "").strip()
-    return compact if len(compact) <= limit else compact[: max(0, limit - 3)].rstrip() + "..."
+    return (
+        compact
+        if len(compact) <= limit
+        else compact[: max(0, limit - 3)].rstrip() + "..."
+    )
 
 
 def _mermaid(value: str) -> str:
-    return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        value.replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
 
 def _md(value: str) -> str:

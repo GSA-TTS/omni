@@ -3,6 +3,7 @@
 Comparisons strip the fed-sync-anchor footer before diffing bodies so that
 provider-specific link metadata never shows up as a false-positive delta.
 """
+
 from __future__ import annotations
 
 from typing import Literal

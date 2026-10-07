@@ -56,9 +56,16 @@ class FakeJira:
     def list_comments(self, key):
         return self._comments
 
-    def edit(self, key, *, assignee=None, add_labels=None, remove_labels=None, dry_run=False):
+    def edit(
+        self, key, *, assignee=None, add_labels=None, remove_labels=None, dry_run=False
+    ):
         self.edits.append(
-            {"assignee": assignee, "add": add_labels, "remove": remove_labels, "dry_run": dry_run}
+            {
+                "assignee": assignee,
+                "add": add_labels,
+                "remove": remove_labels,
+                "dry_run": dry_run,
+            }
         )
         return True, "updated"
 
@@ -88,8 +95,12 @@ def test_skips_done_jira_tickets():
 
 def test_adds_mapped_and_milestone_labels():
     jira = FakeJira(labels=set())
-    result = sync_jira_from_github(
-        [_gh_item(labels=["bug"], milestone="PI 6 Iteration 6.1")], jira, "FPDF-1", _CFG, dry_run=False
+    sync_jira_from_github(
+        [_gh_item(labels=["bug"], milestone="PI 6 Iteration 6.1")],
+        jira,
+        "FPDF-1",
+        _CFG,
+        dry_run=False,
     )
     added = jira.edits[0]["add"]
     assert "bug" in added
@@ -99,29 +110,44 @@ def test_adds_mapped_and_milestone_labels():
 
 def test_removes_only_stale_managed_milestone_labels():
     jira = FakeJira(labels={"milestone:OLD", "human-label", "bug", "github-sync"})
-    sync_jira_from_github([_gh_item(labels=["bug"])], jira, "FPDF-1", _CFG, dry_run=False)
+    sync_jira_from_github(
+        [_gh_item(labels=["bug"])], jira, "FPDF-1", _CFG, dry_run=False
+    )
     removed = jira.edits[0]["remove"]
     assert "milestone:OLD" in removed
     assert "human-label" not in removed
 
 
 def test_disabled_milestone_sync_preserves_existing_milestone_labels():
-    cfg = {**_CFG, "sync": {**_CFG["sync"], "sync_milestone": False, "append_updates": False}}
+    cfg = {
+        **_CFG,
+        "sync": {**_CFG["sync"], "sync_milestone": False, "append_updates": False},
+    }
     jira = FakeJira(labels={"milestone:OLD", "bug", "github-sync"})
-    result = sync_jira_from_github([_gh_item(labels=["bug"])], jira, "FPDF-1", cfg, dry_run=False)
+    result = sync_jira_from_github(
+        [_gh_item(labels=["bug"])], jira, "FPDF-1", cfg, dry_run=False
+    )
     assert result["actions"] == ["no changes"]
     assert jira.edits == []
 
 
 def test_assignee_mapped_from_github_login():
     jira = FakeJira(labels={"bug", "github-sync"}, assignee=None)
-    sync_jira_from_github([_gh_item(labels=["bug"], assignees=["devuser"])], jira, "FPDF-1", _CFG, dry_run=False)
+    sync_jira_from_github(
+        [_gh_item(labels=["bug"], assignees=["devuser"])],
+        jira,
+        "FPDF-1",
+        _CFG,
+        dry_run=False,
+    )
     assert jira.edits[0]["assignee"] == "dev.user@agency.gov"
 
 
 def test_no_changes_when_already_in_sync():
     jira = FakeJira(labels={"bug", "github-sync"})
-    sync_jira_from_github([_gh_item(labels=["bug"])], jira, "FPDF-1", _CFG, dry_run=False)
+    sync_jira_from_github(
+        [_gh_item(labels=["bug"])], jira, "FPDF-1", _CFG, dry_run=False
+    )
     # Labels already present -> no label edit should be issued.
     assert all(e["add"] in (None, []) for e in jira.edits)
 
@@ -134,7 +160,9 @@ class TestBackfill:
                     "key": "FPDF-1",
                     "fields": {
                         "status": {"statusCategory": {"name": status}},
-                        "assignee": {"emailAddress": email, "displayName": "J J"} if email else None,
+                        "assignee": {"emailAddress": email, "displayName": "J J"}
+                        if email
+                        else None,
                     },
                 }
             ]
@@ -142,27 +170,39 @@ class TestBackfill:
 
     def test_backfills_when_github_unassigned(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(), {"dev.user@agency.gov": "devuser"}
+            _gh_item(assignees=[]),
+            "FPDF-1",
+            self._index(),
+            {"dev.user@agency.gov": "devuser"},
         )
         assert plan["action"] == "backfill"
         assert plan["login"] == "devuser"
 
     def test_skips_when_github_already_assigned(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=["someone"]), "FPDF-1", self._index(), {"dev.user@agency.gov": "devuser"}
+            _gh_item(assignees=["someone"]),
+            "FPDF-1",
+            self._index(),
+            {"dev.user@agency.gov": "devuser"},
         )
         assert plan["action"] == "skip"
         assert "already has an assignee" in plan["reason"]
 
     def test_skips_done_jira(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(status="Done"), {"dev.user@agency.gov": "devuser"}
+            _gh_item(assignees=[]),
+            "FPDF-1",
+            self._index(status="Done"),
+            {"dev.user@agency.gov": "devuser"},
         )
         assert plan["action"] == "skip"
 
     def test_skips_unmapped_jira_assignee(self):
         plan = plan_backfill_github_from_jira(
-            _gh_item(assignees=[]), "FPDF-1", self._index(email="unknown@agency.gov"), {"dev.user@agency.gov": "devuser"}
+            _gh_item(assignees=[]),
+            "FPDF-1",
+            self._index(email="unknown@agency.gov"),
+            {"dev.user@agency.gov": "devuser"},
         )
         assert plan["action"] == "skip"
         assert "no GitHub login" in plan["reason"]

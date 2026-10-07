@@ -5,6 +5,7 @@ Remotes are resolved from the [mirror] table of omni-project.toml. This wraps
 `git remote`/`git push` as subprocess list calls (never shell=True) and
 reports per-remote results so one unreachable remote does not abort the rest.
 """
+
 from __future__ import annotations
 
 import os
@@ -30,7 +31,9 @@ class GitMirror:
     is undesirable.
     """
 
-    def __init__(self, remotes: dict[str, str], cwd: str | None = None, batch: bool = False):
+    def __init__(
+        self, remotes: dict[str, str], cwd: str | None = None, batch: bool = False
+    ):
         self.remotes = remotes
         self.cwd = cwd
         self.batch = batch
@@ -42,7 +45,9 @@ class GitMirror:
             # prompt. Off by default so interactive SSH/web auth still works.
             env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
         try:
-            r = subprocess.run(argv, capture_output=True, text=True, timeout=120, cwd=self.cwd, env=env)
+            r = subprocess.run(
+                argv, capture_output=True, text=True, timeout=120, cwd=self.cwd, env=env
+            )
             return r.returncode, (r.stdout + r.stderr).strip()
         except (OSError, subprocess.TimeoutExpired) as exc:
             return 1, str(exc)
@@ -55,20 +60,32 @@ class GitMirror:
         else:
             self._run(["git", "remote", "add", name, url])
 
-    def push(self, ref: str, targets: list[str], dry_run: bool = False) -> list[MirrorResult]:
+    def push(
+        self, ref: str, targets: list[str], dry_run: bool = False
+    ) -> list[MirrorResult]:
         """Push `ref` to each named target. Unknown targets are reported, not fatal."""
         results: list[MirrorResult] = []
         for name in targets:
             url = self.remotes.get(name)
             if not url:
-                results.append(MirrorResult(name, "", False, f"no remote '{name}' in [mirror] config"))
+                results.append(
+                    MirrorResult(
+                        name, "", False, f"no remote '{name}' in [mirror] config"
+                    )
+                )
                 continue
 
             if dry_run:
-                results.append(MirrorResult(name, url, True, f"dry-run: git push {name} {ref}"))
+                results.append(
+                    MirrorResult(name, url, True, f"dry-run: git push {name} {ref}")
+                )
                 continue
 
             self._ensure_remote(name, url)
             rc, out = self._run(["git", "push", name, ref])
-            results.append(MirrorResult(name, url, rc == 0, out.splitlines()[-1] if out else "pushed"))
+            results.append(
+                MirrorResult(
+                    name, url, rc == 0, out.splitlines()[-1] if out else "pushed"
+                )
+            )
         return results

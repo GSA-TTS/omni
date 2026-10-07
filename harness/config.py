@@ -8,6 +8,7 @@ users.toml. All string lookups are case-insensitive.
 Validated against schema/omni-project.schema.json when the (optional)
 `jsonschema` package is available; otherwise a minimal built-in check runs.
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,9 @@ def validate_config(cfg: dict, source: Path | None = None) -> None:
     schema = json.loads(resource_text("schema/omni-project.schema.json"))
     try:
         jsonschema.validate(cfg, schema)
-    except jsonschema.ValidationError as exc:  # pragma: no cover - exercised when installed
+    except (
+        jsonschema.ValidationError
+    ) as exc:  # pragma: no cover - exercised when installed
         where = f" in {source}" if source else ""
         sys.exit(f"omni-project.toml invalid{where}: {exc.message}")
 
@@ -117,6 +120,7 @@ def _developers_from_users(users: dict[str, dict]) -> dict[str, str]:
             if login:
                 out[login] = email
     return out
+
 
 def sanitize_jira_label(name: str) -> str:
     """Jira labels cannot contain spaces -- replace runs of whitespace with hyphens."""
