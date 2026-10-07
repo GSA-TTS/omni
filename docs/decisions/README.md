@@ -10,4 +10,4 @@ last_updated: "2026-10-07"
 
 | ID | Decision | Status | Date | NIST controls |
 |---|---|---|---|---|
-| 0001 | [Use jsonschema for installed configuration validation](0001-use-jsonschema-for-installed-config-validation.md) | Proposed | 2026-10-07 | SA-11, SI-10, SR-3, SR-11 |
+| 0001 | [Use pinned dependencies for installed configuration validation](0001-use-pinned-dependencies-for-installed-validation.md) | Proposed | 2026-10-07 | SA-11, SI-10, SR-3, SR-11 |
