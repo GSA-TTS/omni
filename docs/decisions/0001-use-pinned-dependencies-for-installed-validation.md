@@ -1,6 +1,6 @@
 ---
-title: "Use jsonschema for installed configuration validation"
-description: "Record why omni-sync ships JSON Schemas and validates configuration with a pinned runtime dependency."
+title: "Use pinned dependencies for installed configuration validation"
+description: "Record why omni-sync ships JSON Schemas and uses exact direct dependency versions."
 status: "proposed"
 tier: 2
 date: "2026-10-07"
@@ -13,7 +13,7 @@ ato_relevance: "yes-internal"
 risk_treatment: "mitigate"
 ---
 
-# Use jsonschema for installed configuration validation
+# Use pinned dependencies for installed configuration validation
 
 ## Context and Problem Statement
 
@@ -28,7 +28,8 @@ validation and `omni-sync init` could not access its templates.
 - Invalid external configuration must fail before provider writes occur.
 - The committed schemas must remain the single source of truth for validation
   and editor integration.
-- Runtime dependencies must be pinned and represented in `uv.lock`.
+- Runtime and development dependencies must use current, exact stable versions
+  and be represented in `uv.lock`.
 
 ## Considered Options
 
@@ -42,8 +43,9 @@ validation and `omni-sync init` could not access its templates.
 ## Decision Outcome
 
 Chosen option: **Ship schemas and pin jsonschema at runtime**. The wheel includes
-the canonical schemas and initialization templates as package resources, and
-`jsonschema==4.26.0` is a runtime dependency recorded in `uv.lock`.
+the canonical schemas and initialization templates as package resources.
+`jsonschema==4.26.0` and all other direct dependencies use exact stable versions
+recorded in `pyproject.toml` and `uv.lock`.
 
 ### Positive Consequences
 
@@ -54,7 +56,7 @@ the canonical schemas and initialization templates as package resources, and
 ### Negative Consequences
 
 - The runtime installation includes `jsonschema` and its transitive packages.
-- The dependency version must be deliberately updated and revalidated.
+- Dependency versions must be deliberately updated and revalidated.
 - Hatch build mappings must remain synchronized with canonical root assets.
 
 ### Compliance Consequences

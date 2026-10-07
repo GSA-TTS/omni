@@ -192,16 +192,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = "==4.26.0" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "rich", specifier = ">=13.7" },
-    { name = "typer", specifier = ">=0.12" },
+    { name = "pydantic", specifier = "==2.13.5" },
+    { name = "rich", specifier = "==15.0.0" },
+    { name = "typer", specifier = "==0.27.3" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "hypothesis", specifier = ">=6.100" },
-    { name = "pytest", specifier = ">=8.2" },
-    { name = "pytest-mock", specifier = ">=3.14" },
+    { name = "hypothesis", specifier = "==6.168.5" },
+    { name = "pytest", specifier = "==9.1.1" },
+    { name = "pytest-mock", specifier = "==3.16.0" },
 ]
 
 [[package]]
