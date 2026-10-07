@@ -6,6 +6,7 @@ tooling knowledge.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from typing import Literal, cast
 
@@ -18,6 +19,12 @@ from harness.adapters.github_rest import GitHubRestAdapter
 from harness.adapters.gitlab import GitLabAdapter
 from harness.adapters.jira import JiraAdapter
 from harness.config import load_config
+from harness.config_writer import (
+    build_project_toml,
+    build_users_toml,
+    map_assignment,
+    toml_assignment,
+)
 from harness.engine.board import collect_boards, render_boards
 from harness.engine.gh_jira_sync import (
     build_jira_index,
@@ -874,29 +881,148 @@ def bench(
 @app.command()
 def init(
     force: bool = typer.Option(False, "--force", help="Overwrite existing files"),
+    directory: Path | None = typer.Option(
+        None,
+        "--directory",
+        help="Write into this directory instead of discovering a workspace",
+    ),
+    project: list[str] = typer.Option(
+        None, "--project", help="Project PATH=TOML_VALUE; repeatable"
+    ),
+    user: list[str] = typer.Option(
+        None, "--user", help="Roster EMAIL.FIELD=TOML_VALUE; repeatable"
+    ),
+    group: list[str] = typer.Option(
+        None, "--group", help="Roster SLUG.FIELD=TOML_VALUE; repeatable"
+    ),
+    github_org: str | None = typer.Option(None, "--github-org"),
+    github_repo: list[str] = typer.Option(None, "--github-repo", help="Repeatable"),
+    github_project_number: int | None = typer.Option(None, "--github-project-number"),
+    jira_project_key: str | None = typer.Option(None, "--jira-project-key"),
+    jira_base_url: str | None = typer.Option(None, "--jira-base-url"),
+    gitlab_host: str | None = typer.Option(None, "--gitlab-host"),
+    gitlab_project: str | None = typer.Option(None, "--gitlab-project"),
+    sync_labels: bool | None = typer.Option(None, "--sync-labels/--no-sync-labels"),
+    sync_assignee: bool | None = typer.Option(
+        None, "--sync-assignee/--no-sync-assignee"
+    ),
+    sync_milestone: bool | None = typer.Option(
+        None, "--sync-milestone/--no-sync-milestone"
+    ),
+    append_updates: bool | None = typer.Option(
+        None, "--append-updates/--no-append-updates"
+    ),
+    label: list[str] = typer.Option(
+        None, "--label", help="GitHub-label=Jira-label; repeatable"
+    ),
+    always_apply_jira_label: list[str] = typer.Option(
+        None, "--always-apply-jira-label", help="Repeatable"
+    ),
 ) -> None:
-    """Create the local-only config files (users.toml, .env) from templates.
+    """Create project and local config files from flags or templates.
 
-    Writes into the resolved workspace (searched upward from the CWD). Skips
-    files that already exist unless --force. The created files are gitignored
-    and must be filled in with real values.
+    PATH values use dotted TOML paths. Values use TOML syntax, for example:
+    --project 'github.repos=["repo"]'. Secret values are never accepted.
     """
-    ws = find_workspace()
+    ws = directory.resolve() if directory else find_workspace()
+    if not ws.is_dir():
+        raise typer.BadParameter(f"directory does not exist: {ws}")
     created, skipped = [], []
-    for name in LOCAL_ONLY:
+    project = list(project or [])
+    user = list(user or [])
+    group = list(group or [])
+    label = list(label or [])
+    convenience = {
+        "github.org": github_org,
+        "github.repos": github_repo or None,
+        "github.project_number": github_project_number,
+        "jira.project_key": jira_project_key,
+        "jira.base_url": jira_base_url,
+        "gitlab.host": gitlab_host,
+        "gitlab.project": gitlab_project,
+        "sync.sync_labels": sync_labels,
+        "sync.sync_assignee": sync_assignee,
+        "sync.sync_milestone": sync_milestone,
+        "sync.append_updates": append_updates,
+        "always_apply.jira_labels": always_apply_jira_label or None,
+    }
+    project.extend(
+        toml_assignment(path, value)
+        for path, value in convenience.items()
+        if value is not None
+    )
+    for mapping in label:
+        source, separator, destination = mapping.partition("=")
+        if not separator or not source or not destination:
+            raise typer.BadParameter("label must be GitHub-label=Jira-label")
+        project.append(map_assignment("labels", source, destination))
+
+    files = list(LOCAL_ONLY)
+    if project:
+        files.insert(0, "omni-project.toml")
+    generated = {
+        "omni-project.toml": lambda: build_project_toml(project),
+        "users.toml": lambda: (
+            build_users_toml(user, group)
+            if user or group
+            else resource_text(template_name("users.toml"))
+        ),
+        ".env": lambda: resource_text(template_name(".env")),
+    }
+    try:
+        contents = {name: generated[name]() for name in files}
+    except (ValueError, SystemExit) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
+    writes: list[tuple[Path, str]] = []
+    for name in files:
         dest = ws / name
         if dest.exists() and not force:
             skipped.append(name)
             continue
-        dest.write_text(resource_text(template_name(name)), encoding="utf-8")
-        created.append(name)
+        writes.append((dest, contents[name]))
+
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for dest, content in writes:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=ws, delete=False
+            ) as handle:
+                handle.write(content)
+                staged.append((Path(handle.name), dest))
+        for temporary, dest in staged:
+            temporary.replace(dest)
+            created.append(dest.name)
+    except OSError as exc:
+        for temporary, _ in staged:
+            temporary.unlink(missing_ok=True)
+        typer.echo(f"failed to write configuration: {exc}", err=True)
+        raise typer.Exit(code=1) from None
 
     for name in created:
         typer.echo(f"created {ws / name}")
     for name in skipped:
         typer.echo(f"skipped {name} (exists; use --force to overwrite)")
     if created:
-        typer.echo("\nFill in the created files with real values. They are gitignored.")
+        typer.echo(
+            "\nConfiguration created and validated. Populate .env secrets securely; "
+            "users.toml and .env remain local-only."
+        )
+
+
+@app.command()
+def validate(
+    config: Path | None = typer.Option(
+        None, "--config", help="Path to omni-project.toml"
+    ),
+    users: Path | None = typer.Option(None, "--users", help="Path to users.toml"),
+) -> None:
+    """Validate project and roster TOML without contacting providers."""
+    config = _runtime_config(config)
+    load_config(config)
+    UserRoster.load(users.resolve() if users else config.parent / "users.toml")
+    typer.echo(f"valid: {config}")
+    typer.echo(f"valid: {users.resolve() if users else config.parent / 'users.toml'}")
 
 
 def main() -> None:

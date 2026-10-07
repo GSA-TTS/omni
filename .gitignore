@@ -5,6 +5,7 @@ __pycache__/
 .coverage
 .hypothesis/
 *.egg-info/
+*.spec
 dist/
 build/
 .DS_Store

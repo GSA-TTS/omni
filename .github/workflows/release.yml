@@ -1,12 +1,12 @@
 name: Release
 
-# Publishes a standalone PyApp binary of omni-sync.
+# Publishes a standalone PyInstaller binary of omni-sync.
 #
 #   * Every merge to main  -> auto patch release  1.0.<github.run_number>
 #   * Push a tag v1.1.0     -> release that exact version (minor/major bump)
 #
-# PyApp (https://ofek.dev/pyapp/) wraps the uv-built wheel into a single
-# self-bootstrapping executable per OS/arch. git-cliff generates the notes.
+# PyInstaller bundles CPython, omni-sync, dependencies, schemas, and templates
+# into a single executable per OS/arch. git-cliff generates the notes.
 
 on:
   push:
@@ -66,40 +66,73 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
-      - name: Install Rust (for PyApp)
-        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable 2026-10-07
-        with:
-          targets: ${{ matrix.target }}
-
       - name: Set wheel version
         shell: bash
-        run: uv version "$VERSION"
+        run: |
+          uv sync --locked
+          uv version "$VERSION"
 
       - name: Build wheel
         shell: bash
         run: uv build --wheel
 
-      - name: Build PyApp binary
+      - name: Build standalone binary
         shell: bash
-        env:
-          PYAPP_PROJECT_NAME: omni-sync
-          PYAPP_PROJECT_VERSION: ${{ env.VERSION }}
-          PYAPP_EXEC_SPEC: "harness.cli:app"
-          PYAPP_PYTHON_VERSION: "3.13"
-          PYAPP_UV_ENABLED: "1"
         run: |
-          # Point PyApp at the locally built wheel, then compile the launcher.
-          wheel="$(ls dist/omni_sync-*.whl | head -1)"
-          export PYAPP_PROJECT_PATH="$PWD/$wheel"
-          cargo install pyapp --locked --root "$RUNNER_TEMP/pyapp"
-          bin="$RUNNER_TEMP/pyapp/bin/pyapp${{ matrix.ext }}"
-          out="omni-sync-${VERSION}-${{ matrix.target }}${{ matrix.ext }}"
-          mv "$bin" "$out"
+          name="omni-sync-${VERSION}-${{ matrix.target }}"
+          out="${name}${{ matrix.ext }}"
+          uv run --no-sync pyinstaller \
+            --onefile \
+            --name "$name" \
+            --add-data ".env.example:harness/resources" \
+            --add-data "users.toml.example:harness/resources" \
+            --add-data "schema/omni-project.schema.json:harness/resources/schema" \
+            --add-data "schema/users.schema.json:harness/resources/schema" \
+            harness/__main__.py
+          mv "dist/$out" "$out"
           echo "ARTIFACT=$out" >> "$GITHUB_ENV"
 
       - name: Smoke-test the binary
         shell: bash
-        run: ./"$ARTIFACT" --help
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: ""
+        run: |
+          binary="$PWD/$ARTIFACT"
+          workspace="$RUNNER_TEMP/omni-bootstrap"
+          mkdir -p "$workspace"
+          cd "$workspace"
+          "$binary" init --directory "$workspace" \
+            --project 'jira.project_key="TEST"' \
+            --project 'github.org="example-org"' \
+            --project 'github.repos=["example-repo"]' \
+            --project 'sync.sync_labels=true' \
+            --project 'sync.sync_status=false' \
+            --user 'person@agency.gov.gh="example-user"' \
+            --group 'example-team.members=["person@agency.gov"]' \
+            --group 'example-team.github_org="example-org"' \
+            --group 'example-team.github_team="example-team"'
+          "$binary" validate
+          test -f omni-project.toml
+          test -f users.toml
+          test -f .env
+          grep -q 'project_key = "TEST"' omni-project.toml
+          grep -q 'gh = "example-user"' users.toml
+          cp omni-project.toml omni-project.before
+          "$binary" init --directory "$workspace" \
+            --jira-project-key OTHER \
+            --github-org other-org \
+            --github-repo other-repo
+          cmp omni-project.before omni-project.toml
+          rm omni-project.before
+          "$binary" init --force --directory "$workspace" \
+            --jira-project-key OTHER \
+            --github-org other-org \
+            --github-repo other-repo
+          grep -q 'project_key = "OTHER"' omni-project.toml
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 3
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -140,11 +173,22 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          mapfile -d '' artifacts < <(find artifacts -type f -print0)
+          mapfile -d '' artifacts < <(find artifacts -type f -name 'omni-sync-*' -print0)
           if (( ${#artifacts[@]} == 0 )); then
             echo "No release artifacts found" >&2
             exit 1
           fi
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          artifacts = sorted(path for path in Path("artifacts").rglob("*") if path.is_file())
+          with Path("SHA256SUMS.txt").open("w", encoding="utf-8") as output:
+              for artifact in artifacts:
+                  digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+                  output.write(f"{digest}  {artifact.name}\n")
+          PY
+          artifacts+=(SHA256SUMS.txt)
           gh release create "$TAG" "${artifacts[@]}" \
             --title "omni-sync $VERSION" \
             --notes-file RELEASE_NOTES.md

@@ -435,13 +435,40 @@ against GitHub, GitLab, or Jira in the standard test suite.
 
 ## Releases
 
-CI builds a self-bootstrapping [PyApp](https://ofek.dev/pyapp/) binary using
-Python 3.13 for Linux, macOS arm64, and Windows via `uv`. Every platform binary
-must pass an `--help` smoke test before release:
+CI builds a standalone [PyInstaller](https://pyinstaller.org/) binary containing
+CPython 3.13, omni-sync, its runtime dependencies, schemas, and templates for
+Linux, macOS arm64, and Windows. Every platform binary must initialize and
+validate a fresh repository with outbound networking disabled before release.
 
 The Linux release runner is pinned to Ubuntu 24.04 LTS rather than following
 the mutable `ubuntu-latest` image. Third-party actions are pinned to immutable
 commit SHAs with version comments and scanned by zizmor.
+
+Each release also publishes `SHA256SUMS.txt`. An agent in another repository can
+download and verify the current platform artifact before generating config:
+
+```sh
+gh release download --repo GSA-TTS/omni --pattern 'omni-sync-*-aarch64-apple-darwin' --pattern SHA256SUMS.txt
+artifact="$(find . -maxdepth 1 -name 'omni-sync-*-aarch64-apple-darwin' -print -quit)"
+expected="$(awk -v name="${artifact#./}" '$2 == name { print $1 }' SHA256SUMS.txt)"
+test -n "$expected" && test "$(shasum -a 256 "$artifact" | awk '{print $1}')" = "$expected"
+chmod +x omni-sync-*-aarch64-apple-darwin
+
+./omni-sync-*-aarch64-apple-darwin init --directory . \
+  --project 'jira.project_key="TEST"' \
+  --project 'github.org="GSA-TTS"' \
+  --project 'github.repos=["example-repo"]' \
+  --user 'person@agency.gov.gh="example-user"' \
+  --group 'example-team.members=["person@agency.gov"]'
+
+./omni-sync-*-aarch64-apple-darwin validate
+```
+
+`--project` accepts any dotted path from `omni-project.schema.json`; its value
+uses TOML syntax. `--user EMAIL.FIELD=VALUE` and `--group SLUG.FIELD=VALUE`
+cover `users.schema.json`. Repeat flags for multiple values or mappings. Secret
+values are deliberately excluded from flags because command lines are visible
+in shell history and process listings; populate the generated `.env` securely.
 
 - **Every merge to `main`** publishes an auto patch release `1.0.<run-number>`.
 - **Pushing a `v1.1.0`-style tag** cuts that exact version (minor/major bump).
