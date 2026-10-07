@@ -14,6 +14,7 @@ prefixed Jira label (see config.milestone_label).
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime
 
@@ -262,11 +263,23 @@ class AcliJiraAdapter(BaseIssueAdapter):
     ) -> tuple[bool, str]:
         """Create or update the single marked sync comment in place.
 
-        Finds our comment by its leading marker line (matched on content, not
-        author, so it survives credential rotation). Never touches any other
-        comment or the description field.
+        Finds our comment by its leading marker line and verifies its author
+        against the gitignored JIRA_COMMENT_AUTHOR identity before updating.
+        Never touches any other comment or the description field.
         """
         existing = find_sync_comment(self.list_comments(issue_id))
+        if existing:
+            expected_author = os.environ.get("JIRA_COMMENT_AUTHOR", "").strip()
+            actual_author = str(existing.get("author") or "").strip()
+            if not expected_author:
+                raise AdapterError(
+                    "JIRA_COMMENT_AUTHOR is required to update a managed Jira comment"
+                )
+            if actual_author != expected_author:
+                raise AdapterError(
+                    "Managed Jira comment author does not match JIRA_COMMENT_AUTHOR; "
+                    "refusing update"
+                )
 
         if dry_run:
             return (

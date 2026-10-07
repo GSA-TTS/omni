@@ -112,6 +112,11 @@ How the source body is written onto the target issue:
 read-modify-write a human's description.** Prefer it when syncing into a
 tracker whose descriptions people edit by hand.
 
+Managed Jira comment updates also fail closed: `JIRA_COMMENT_AUTHOR` must match
+the exact `author` string returned by `acli ... comment list --json`. A missing
+or mismatched value prevents updates to an existing marked comment; it does not
+prevent creation when no managed comment exists.
+
 ## Label sync
 
 `diff` and `sync` reconcile labels alongside title/body/state. On apply, the

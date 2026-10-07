@@ -77,8 +77,13 @@ class TestAcliJiraAdapter:
         assert ok and msg.startswith("dry-run:")
         run_mock.assert_not_called()
 
-    def test_upsert_sync_comment_updates_existing_in_place(self, mocker):
-        comments = {"comments": [{"id": "99", "body": "[github-sync] old"}]}
+    def test_upsert_sync_comment_updates_existing_in_place(self, mocker, monkeypatch):
+        monkeypatch.setenv("JIRA_COMMENT_AUTHOR", "Sync User")
+        comments = {
+            "comments": [
+                {"id": "99", "body": "[github-sync] old", "author": "Sync User"}
+            ]
+        }
         run_mock = mocker.patch(
             "subprocess.run",
             side_effect=[_mock_completed(json.dumps(comments)), _mock_completed("")],
@@ -89,6 +94,55 @@ class TestAcliJiraAdapter:
         assert ok and msg == "comment updated"
         update_argv = run_mock.call_args_list[1].args[0]
         assert "update" in update_argv and "--id" in update_argv
+
+    def test_upsert_sync_comment_requires_expected_author(self, mocker, monkeypatch):
+        monkeypatch.delenv("JIRA_COMMENT_AUTHOR", raising=False)
+        comments = {
+            "comments": [
+                {"id": "99", "body": "[github-sync] old", "author": "Sync User"}
+            ]
+        }
+        run_mock = mocker.patch(
+            "subprocess.run", return_value=_mock_completed(json.dumps(comments))
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+
+        with pytest.raises(AdapterError, match="JIRA_COMMENT_AUTHOR is required"):
+            adapter.upsert_sync_comment("FPDF-402", "[github-sync] new")
+
+        assert run_mock.call_count == 1
+
+    def test_upsert_sync_comment_rejects_different_author(self, mocker, monkeypatch):
+        monkeypatch.setenv("JIRA_COMMENT_AUTHOR", "Sync User")
+        comments = {
+            "comments": [
+                {"id": "99", "body": "[github-sync] old", "author": "Other User"}
+            ]
+        }
+        run_mock = mocker.patch(
+            "subprocess.run", return_value=_mock_completed(json.dumps(comments))
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+
+        with pytest.raises(AdapterError, match="author does not match"):
+            adapter.upsert_sync_comment("FPDF-402", "[github-sync] new")
+
+        assert run_mock.call_count == 1
+
+    def test_dry_run_enforces_comment_author(self, mocker, monkeypatch):
+        monkeypatch.setenv("JIRA_COMMENT_AUTHOR", "Sync User")
+        comments = {
+            "comments": [
+                {"id": "99", "body": "[github-sync] old", "author": "Other User"}
+            ]
+        }
+        mocker.patch(
+            "subprocess.run", return_value=_mock_completed(json.dumps(comments))
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+
+        with pytest.raises(AdapterError, match="author does not match"):
+            adapter.upsert_sync_comment("FPDF-402", "[github-sync] new", dry_run=True)
 
     def test_upsert_sync_comment_creates_when_absent(self, mocker):
         comments = {"comments": [{"id": "1", "body": "a human comment"}]}
