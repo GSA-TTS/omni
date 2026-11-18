@@ -6,6 +6,7 @@ import base64
 import json
 import urllib.error
 import urllib.request
+from dataclasses import replace
 
 from harness.adapters.acli_jira import build_jql, issues_from_search
 from harness.adapters.base import AdapterError
@@ -26,30 +27,51 @@ class JiraRestBoardAdapter:
         self.project_key = project_key
 
     def list_issues(self, query: IssueQuery) -> list[OpenIssue]:
-        jql = build_jql(self.project_key, query)
-        payload = json.dumps(
-            {
-                "jql": jql,
-                "maxResults": min(query.limit, 100),
-                "fields": ["key", "summary", "description", "labels"],
-            }
-        ).encode()
+        if "@me" in query.users:
+            account_id = self._account_id()
+            query = replace(
+                query,
+                users=tuple(
+                    account_id if user == "@me" else user for user in query.users
+                ),
+            )
+        payload = {
+            "jql": build_jql(self.project_key, query),
+            "maxResults": min(query.limit, 100),
+            "fields": ["key", "summary", "description", "labels"],
+        }
+        return issues_from_search(
+            self._request("POST", "/rest/api/3/search/jql", payload), self.base_url
+        )
+
+    def _account_id(self) -> str:
+        """Resolve the authenticated user; `currentUser()` is unreliable over REST."""
+        account_id = self._request("GET", "/rest/api/3/myself").get("accountId")
+        if not isinstance(account_id, str) or not account_id:
+            raise AdapterError("Jira REST /myself returned no accountId")
+        return account_id
+
+    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
         authorization = base64.b64encode(f"{self.email}:{self.token}".encode()).decode(
             "ascii"
         )
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Basic {authorization}",
+        }
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
-            f"{self.base_url}/rest/api/3/search/jql",
-            data=payload,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "Authorization": f"Basic {authorization}",
-            },
-            method="POST",
+            f"{self.base_url}{path}",
+            data=json.dumps(payload).encode() if payload is not None else None,
+            headers=headers,
+            method=method,
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 data = json.load(response)
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             raise AdapterError("Jira REST board query failed") from exc
-        return issues_from_search(data, self.base_url)
+        if not isinstance(data, dict):
+            raise AdapterError("Unexpected Jira REST response")
+        return data

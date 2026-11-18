@@ -173,28 +173,23 @@ def _collect_jira(boards, errors, cfg, board_urls, roster, query) -> None:
         query.limit,
         query.sprint,
     )
+    email = os.environ.get("JIRA_EMAIL")
+    token = os.environ.get("JIRA_API_TOKEN")
+    rest = (
+        JiraRestBoardAdapter(base_url, email, token, project)
+        if email and token
+        else None
+    )
     try:
         issues = adapter.list_issues(base_url, jira_query)
-        boards.append(
-            IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url))
-        )
     except AdapterError as exc:
-        email = os.environ.get("JIRA_EMAIL")
-        token = os.environ.get("JIRA_API_TOKEN")
-        if not email or not token:
+        if rest is None:
             _failed_board(
                 boards, errors, "Jira", "jira", ticket_url, "jira-mod", str(exc)
             )
             return
         try:
-            issues = JiraRestBoardAdapter(base_url, email, token, project).list_issues(
-                jira_query
-            )
-            boards.append(
-                IssueBoard(
-                    "Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url)
-                )
-            )
+            issues = rest.list_issues(jira_query)
         except AdapterError:
             _failed_board(
                 boards,
@@ -205,6 +200,18 @@ def _collect_jira(boards, errors, cfg, board_urls, roster, query) -> None:
                 "jira-mod",
                 "acli and Jira REST board queries failed",
             )
+            return
+    else:
+        # `acli` can exit 0 with no rows when its session is unauthenticated, so an
+        # empty result is re-checked over REST; a REST failure keeps the empty result.
+        if not issues and rest is not None:
+            try:
+                issues = rest.list_issues(jira_query)
+            except AdapterError:
+                pass
+    boards.append(
+        IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url))
+    )
 
 
 def _failed_board(boards, errors, name, slug, ticket_url, target, message) -> None:

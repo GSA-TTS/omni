@@ -1,13 +1,15 @@
 import json
 import subprocess
+import urllib.error
 
 import pytest
 
 from harness.adapters.acli_jira import AcliJiraAdapter
+from harness.adapters.base import AdapterError
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
 from harness.adapters.jira_rest import JiraRestBoardAdapter
-from harness.engine.board import IssueBoard, render_boards
+from harness.engine.board import IssueBoard, _collect_jira, render_boards
 from harness.models import IssueQuery, OpenIssue
 
 
@@ -166,22 +168,186 @@ def test_jira_list_applies_sprint_filter(mocker, sprint, expected):
     assert expected in argv[argv.index("--jql") + 1]
 
 
-def test_jira_rest_board_query_is_read_only_and_uses_same_jql(mocker):
-    response = mocker.Mock()
-    response.__enter__ = mocker.Mock(return_value=response)
-    response.__exit__ = mocker.Mock(return_value=False)
-    response.read.return_value = json.dumps({"issues": []}).encode()
-    mocker.patch("urllib.request.urlopen", return_value=response)
-    request = mocker.patch("urllib.request.Request", autospec=True)
-    adapter = JiraRestBoardAdapter(
-        "https://jira.example", "user@example", "token", "TEST"
+def _urlopen_responses(mocker, *payloads):
+    responses = []
+    for payload in payloads:
+        response = mocker.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(payload).encode()
+        responses.append(response)
+    return mocker.patch("urllib.request.urlopen", side_effect=responses)
+
+
+def _rest_adapter():
+    return JiraRestBoardAdapter("https://jira.example/", "u@example", "tok", "TEST")
+
+
+def test_jira_rest_resolves_me_to_account_id_and_uses_basic_auth(mocker):
+    urlopen = _urlopen_responses(
+        mocker,
+        {"accountId": "acct-1"},
+        {"issues": [{"key": "TEST-1", "fields": {"summary": "s"}}]},
     )
 
-    assert (
-        adapter.list_issues(IssueQuery(("assigned",), ("@me",), sprint="active")) == []
+    issues = _rest_adapter().list_issues(
+        IssueQuery(("assigned",), ("@me",), sprint="active")
     )
-    assert "sprint in openSprints()" in request.call_args.kwargs["data"].decode()
-    assert response.read.called
+
+    assert [i.issue_id for i in issues] == ["TEST-1"]
+    myself, search = (call.args[0] for call in urlopen.call_args_list)
+    assert myself.get_method() == "GET"
+    assert myself.full_url == "https://jira.example/rest/api/3/myself"
+    assert search.get_method() == "POST"
+    body = json.loads(search.data)
+    assert 'assignee = "acct-1"' in body["jql"]
+    assert "currentUser()" not in body["jql"]
+    assert "sprint in openSprints()" in body["jql"]
+    assert search.get_header("Authorization").startswith("Basic ")
+    assert all(call.kwargs["timeout"] == 30 for call in urlopen.call_args_list)
+
+
+def test_jira_rest_skips_myself_lookup_for_named_users(mocker):
+    urlopen = _urlopen_responses(mocker, {"issues": []})
+
+    _rest_adapter().list_issues(IssueQuery(("assigned",), ("alice",)))
+
+    assert urlopen.call_count == 1
+
+
+def test_jira_rest_caps_page_size_at_100(mocker):
+    urlopen = _urlopen_responses(mocker, {"issues": []})
+
+    _rest_adapter().list_issues(IssueQuery(("assigned",), ("alice",), limit=500))
+
+    assert json.loads(urlopen.call_args.args[0].data)["maxResults"] == 100
+
+
+def test_jira_rest_rejects_missing_account_id(mocker):
+    _urlopen_responses(mocker, {})
+
+    with pytest.raises(AdapterError, match="accountId"):
+        _rest_adapter().list_issues(IssueQuery(("assigned",), ("@me",)))
+
+
+@pytest.mark.parametrize("error", [urllib.error.URLError("down"), TimeoutError()])
+def test_jira_rest_wraps_transport_errors_without_credentials(mocker, error):
+    mocker.patch("urllib.request.urlopen", side_effect=error)
+
+    with pytest.raises(AdapterError) as exc:
+        _rest_adapter().list_issues(IssueQuery(("assigned",), ("alice",)))
+
+    assert "tok" not in str(exc.value)
+
+
+def test_jira_rest_rejects_non_json_response(mocker):
+    response = mocker.MagicMock()
+    response.__enter__.return_value = response
+    response.read.return_value = b"<html>"
+    mocker.patch("urllib.request.urlopen", return_value=response)
+
+    with pytest.raises(AdapterError):
+        _rest_adapter().list_issues(IssueQuery(("assigned",), ("alice",)))
+
+
+CFG = {"jira": {"base_url": "https://jira.example", "project_key": "TEST"}}
+
+
+def _collect(mocker, *, acli, rest, env):
+    mocker.patch.dict("os.environ", env, clear=True)
+    acli_mock = mocker.patch.object(AcliJiraAdapter, "list_issues", **acli)
+    rest_mock = mocker.patch.object(JiraRestBoardAdapter, "list_issues", **rest)
+    roster = mocker.Mock()
+    roster.resolve_issue_user.side_effect = lambda _t, value: value
+    boards, errors = [], []
+    _collect_jira(boards, errors, CFG, {}, roster, IssueQuery(("assigned",), ("@me",)))
+    return boards, errors, acli_mock, rest_mock
+
+
+CREDS = {"JIRA_EMAIL": "u@example", "JIRA_API_TOKEN": "tok"}
+ISSUE = OpenIssue("jira-mod", "TEST-1", "t", "", (), "")
+
+
+def test_collect_jira_uses_acli_result_without_rest_when_non_empty(mocker):
+    boards, errors, _, rest = _collect(
+        mocker, acli={"return_value": [ISSUE]}, rest={"return_value": []}, env=CREDS
+    )
+
+    assert [i.issue_id for i in boards[0].issues] == ["TEST-1"]
+    assert errors == []
+    rest.assert_not_called()
+
+
+def test_collect_jira_rechecks_empty_acli_result_over_rest(mocker):
+    rest_issue = OpenIssue("jira-mod", "TEST-2", "t", "", (), "")
+    boards, errors, _, rest = _collect(
+        mocker,
+        acli={"return_value": []},
+        rest={"return_value": [rest_issue]},
+        env=CREDS,
+    )
+
+    assert [i.issue_id for i in boards[0].issues] == ["TEST-2"]
+    assert errors == []
+    rest.assert_called_once()
+
+
+def test_collect_jira_keeps_empty_acli_result_when_rest_recheck_fails(mocker):
+    boards, errors, _, _ = _collect(
+        mocker,
+        acli={"return_value": []},
+        rest={"side_effect": AdapterError("boom")},
+        env=CREDS,
+    )
+
+    assert boards[0].issues == () and boards[0].error is None
+    assert errors == []
+
+
+def test_collect_jira_empty_acli_result_without_credentials_skips_rest(mocker):
+    boards, errors, _, rest = _collect(
+        mocker, acli={"return_value": []}, rest={"return_value": []}, env={}
+    )
+
+    assert boards[0].issues == ()
+    rest.assert_not_called()
+
+
+def test_collect_jira_falls_back_to_rest_when_acli_errors(mocker):
+    boards, errors, _, rest = _collect(
+        mocker,
+        acli={"side_effect": AdapterError("unauthenticated")},
+        rest={"return_value": [ISSUE]},
+        env=CREDS,
+    )
+
+    assert [i.issue_id for i in boards[0].issues] == ["TEST-1"]
+    assert errors == []
+    rest.assert_called_once()
+
+
+def test_collect_jira_fails_closed_when_acli_errors_without_credentials(mocker):
+    boards, errors, _, rest = _collect(
+        mocker,
+        acli={"side_effect": AdapterError("unauthenticated")},
+        rest={"return_value": [ISSUE]},
+        env={},
+    )
+
+    assert boards[0].issues == () and boards[0].error == "unauthenticated"
+    assert errors == ["FAILED on jira-mod: unauthenticated"]
+    rest.assert_not_called()
+
+
+def test_collect_jira_fails_closed_when_both_providers_error(mocker):
+    boards, errors, _, _ = _collect(
+        mocker,
+        acli={"side_effect": AdapterError("a")},
+        rest={"side_effect": AdapterError("b")},
+        env=CREDS,
+    )
+
+    assert boards[0].issues == ()
+    assert errors == ["FAILED on jira-mod: acli and Jira REST board queries failed"]
 
 
 def test_renderer_creates_separate_boards_with_direct_links_and_safe_text():
