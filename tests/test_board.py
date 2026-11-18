@@ -171,7 +171,7 @@ def test_jira_rest_board_query_is_read_only_and_uses_same_jql(mocker):
     response.__enter__ = mocker.Mock(return_value=response)
     response.__exit__ = mocker.Mock(return_value=False)
     response.read.return_value = json.dumps({"issues": []}).encode()
-    mocker.patch("urllib.request.OpenerDirector.open", return_value=response)
+    mocker.patch("urllib.request.urlopen", return_value=response)
     request = mocker.patch("urllib.request.Request", autospec=True)
     adapter = JiraRestBoardAdapter(
         "https://jira.example", "user@example", "token", "TEST"

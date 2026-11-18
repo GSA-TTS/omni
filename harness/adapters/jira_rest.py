@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import urllib.error
 import urllib.request
@@ -33,22 +34,21 @@ class JiraRestBoardAdapter:
                 "fields": ["key", "summary", "description", "labels"],
             }
         ).encode()
+        authorization = base64.b64encode(f"{self.email}:{self.token}".encode()).decode(
+            "ascii"
+        )
         request = urllib.request.Request(
             f"{self.base_url}/rest/api/3/search/jql",
             data=payload,
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
+                "Authorization": f"Basic {authorization}",
             },
             method="POST",
         )
-        manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        manager.add_password(None, self.base_url, self.email, self.token)
-        opener = urllib.request.build_opener(
-            urllib.request.HTTPBasicAuthHandler(manager)
-        )
         try:
-            with opener.open(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=30) as response:
                 data = json.load(response)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
             raise AdapterError("Jira REST board query failed") from exc
