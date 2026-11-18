@@ -121,32 +121,6 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     def list_issues(self, base_url: str, query: IssueQuery) -> list[OpenIssue]:
         """List Jira work matching normalized relationship and content filters."""
-        people: list[str] = []
-        for relationship in query.relationships:
-            field = "reporter" if relationship == "authored" else "assignee"
-            people.extend(
-                f"{field} = currentUser()"
-                if user == "@me"
-                else f'{field} = "{_jql(user)}"'
-                for user in query.users
-            )
-        clauses = [f'project = "{_jql(self.project_key)}"', f"({' OR '.join(people)})"]
-        if query.state == "open":
-            clauses.append("statusCategory != Done")
-        elif query.state == "closed":
-            clauses.append("statusCategory = Done")
-        clauses.extend(f'labels = "{_jql(label)}"' for label in query.labels)
-        if query.search:
-            clauses.append(f'text ~ "{_jql(query.search)}"')
-        if query.sprint:
-            sprint = query.sprint.strip()
-            if sprint.lower() == "active":
-                clauses.append("sprint in openSprints()")
-            elif sprint.lower() == "future":
-                clauses.append("sprint in futureSprints()")
-            else:
-                clauses.append(f'sprint = "{_jql(sprint)}"')
-        jql = " AND ".join(clauses)
         data = self._run_cli(
             [
                 self.acli_bin,
@@ -154,7 +128,7 @@ class AcliJiraAdapter(BaseIssueAdapter):
                 "workitem",
                 "search",
                 "--jql",
-                jql,
+                build_jql(self.project_key, query),
                 "--fields",
                 "key,summary,description,labels",
                 "--limit",
@@ -162,30 +136,11 @@ class AcliJiraAdapter(BaseIssueAdapter):
                 "--json",
             ]
         )
-        items = data.get("issues", []) if isinstance(data, dict) else data
-        if not isinstance(items, list):
+        if not isinstance(data, (dict, list)):
             raise AdapterError(
                 f"Unexpected Jira workitem search output for {self.project_key}"
             )
-        return [
-            OpenIssue(
-                provider="jira-mod",
-                issue_id=str(item.get("key") or ""),
-                title=(item.get("fields") or {}).get("summary")
-                or item.get("summary")
-                or "",
-                body=_adf_text(
-                    (item.get("fields") or {}).get("description")
-                    or item.get("description")
-                ),
-                labels=tuple(
-                    (item.get("fields") or {}).get("labels") or item.get("labels") or []
-                ),
-                url=f"{base_url.rstrip('/')}/browse/{item.get('key')}",
-            )
-            for item in items
-            if item.get("key")
-        ]
+        return issues_from_search(data, base_url)
 
     # ---- writes ------------------------------------------------------------
 
@@ -334,6 +289,59 @@ class AcliJiraAdapter(BaseIssueAdapter):
         except AdapterError as exc:
             return False, str(exc)[:400]
         return True, f"comment {verb}"
+
+
+def build_jql(project_key: str, query: IssueQuery) -> str:
+    """Build the read-only Jira board query shared by CLI adapters."""
+    people: list[str] = []
+    for relationship in query.relationships:
+        field = "reporter" if relationship == "authored" else "assignee"
+        people.extend(
+            f"{field} = currentUser()" if user == "@me" else f'{field} = "{_jql(user)}"'
+            for user in query.users
+        )
+    clauses = [f'project = "{_jql(project_key)}"', f"({' OR '.join(people)})"]
+    if query.state == "open":
+        clauses.append("statusCategory != Done")
+    elif query.state == "closed":
+        clauses.append("statusCategory = Done")
+    clauses.extend(f'labels = "{_jql(label)}"' for label in query.labels)
+    if query.search:
+        clauses.append(f'text ~ "{_jql(query.search)}"')
+    if query.sprint:
+        sprint = query.sprint.strip()
+        if sprint.lower() == "active":
+            clauses.append("sprint in openSprints()")
+        elif sprint.lower() == "future":
+            clauses.append("sprint in futureSprints()")
+        else:
+            clauses.append(f'sprint = "{_jql(sprint)}"')
+    return " AND ".join(clauses)
+
+
+def issues_from_search(data: dict | list, base_url: str) -> list[OpenIssue]:
+    """Normalize a Jira search response without exposing provider internals."""
+    items = data.get("issues", []) if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        raise AdapterError("Unexpected Jira workitem search output")
+    return [
+        OpenIssue(
+            provider="jira-mod",
+            issue_id=str(item.get("key") or ""),
+            title=(item.get("fields") or {}).get("summary")
+            or item.get("summary")
+            or "",
+            body=_adf_text(
+                (item.get("fields") or {}).get("description") or item.get("description")
+            ),
+            labels=tuple(
+                (item.get("fields") or {}).get("labels") or item.get("labels") or []
+            ),
+            url=f"{base_url.rstrip('/')}/browse/{item.get('key')}",
+        )
+        for item in items
+        if item.get("key")
+    ]
 
 
 def find_sync_comment(comments: list[dict]) -> dict | None:
