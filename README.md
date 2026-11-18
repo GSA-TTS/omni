@@ -39,6 +39,10 @@ mise exec -- uv run omni-sync board
 # Current assignments only
 mise exec -- uv run omni-sync board --relationship assigned
 
+# Current assignments in the active Jira sprint
+mise exec -- uv run omni-sync board --target jira-mod \
+  --relationship assigned --sprint active
+
 # Work for a roster user across providers
 mise exec -- uv run omni-sync board --user person@agency.gov
 

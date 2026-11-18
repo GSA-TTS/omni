@@ -254,6 +254,11 @@ def board(
     body_limit: int = typer.Option(
         180, "--body-limit", help="Maximum body characters per card"
     ),
+    sprint: str | None = typer.Option(
+        None,
+        "--sprint",
+        help="Jira sprint: active, future, or an exact sprint name",
+    ),
 ) -> None:
     """Write one agent- and human-readable Markdown issue report."""
     if limit < 1:
@@ -262,6 +267,12 @@ def board(
         raise typer.BadParameter("limit cannot exceed 100")
     if body_limit < 1:
         raise typer.BadParameter("body-limit must be at least 1")
+    # Direct Python callers from before --sprint was added omit this trailing
+    # parameter, leaving Typer's OptionInfo default in place.
+    if not isinstance(sprint, str):
+        sprint = None
+    if sprint is not None and not sprint.strip():
+        raise typer.BadParameter("sprint cannot be empty")
     relationships = tuple(relationship or ("authored", "assigned"))
     users = tuple(user or ("@me",))
     labels = tuple(label or ())
@@ -285,7 +296,7 @@ def board(
         if any("@" in value and value != "@me" for value in users)
         else UserRoster({})
     )
-    query = IssueQuery(relationships, users, state, labels, search, limit)
+    query = IssueQuery(relationships, users, state, labels, search, limit, sprint)
     boards, errors = collect_boards(cfg, roster, query, selected_targets)
     for error in errors:
         typer.echo(error, err=True)
@@ -296,6 +307,7 @@ def board(
         "State": state,
         "Labels": ", ".join(labels) or "any",
         "Search": search or "none",
+        "Sprint": sprint or "any",
         "Targets": ", ".join(selected_targets),
     }
     markdown = render_boards(boards, body_limit, filters)

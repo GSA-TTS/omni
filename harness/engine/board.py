@@ -134,6 +134,7 @@ def _query_board(
                 query.labels,
                 query.search,
                 query.limit,
+                query.sprint,
             )
         )
         boards.append(
@@ -163,7 +164,13 @@ def _collect_jira(boards, errors, cfg, board_urls, roster, query) -> None:
     )
     users = tuple(roster.resolve_issue_user("jira-mod", value) for value in query.users)
     jira_query = IssueQuery(
-        query.relationships, users, query.state, query.labels, query.search, query.limit
+        query.relationships,
+        users,
+        query.state,
+        query.labels,
+        query.search,
+        query.limit,
+        query.sprint,
     )
     try:
         issues = adapter.list_issues(base_url, jira_query)

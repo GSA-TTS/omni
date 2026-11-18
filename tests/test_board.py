@@ -1,6 +1,8 @@
 import json
 import subprocess
 
+import pytest
+
 from harness.adapters.acli_jira import AcliJiraAdapter
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
@@ -143,6 +145,24 @@ def test_jira_list_escapes_named_users_and_applies_filters(mocker):
     assert "statusCategory = Done" in jql
     assert 'labels = "risk"' in jql
     assert 'text ~ "token refresh"' in jql
+
+
+@pytest.mark.parametrize(
+    ("sprint", "expected"),
+    [
+        ("active", "sprint in openSprints()"),
+        ("future", "sprint in futureSprints()"),
+        ("PI Iteration 7.1", 'sprint = "PI Iteration 7.1"'),
+    ],
+)
+def test_jira_list_applies_sprint_filter(mocker, sprint, expected):
+    run = mocker.patch("subprocess.run", return_value=_completed([]))
+    AcliJiraAdapter("acli", "TEST").list_issues(
+        "https://jira.example", IssueQuery(("assigned",), ("@me",), sprint=sprint)
+    )
+
+    argv = run.call_args.args[0]
+    assert expected in argv[argv.index("--jql") + 1]
 
 
 def test_renderer_creates_separate_boards_with_direct_links_and_safe_text():

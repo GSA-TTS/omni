@@ -138,6 +138,14 @@ class AcliJiraAdapter(BaseIssueAdapter):
         clauses.extend(f'labels = "{_jql(label)}"' for label in query.labels)
         if query.search:
             clauses.append(f'text ~ "{_jql(query.search)}"')
+        if query.sprint:
+            sprint = query.sprint.strip()
+            if sprint.lower() == "active":
+                clauses.append("sprint in openSprints()")
+            elif sprint.lower() == "future":
+                clauses.append("sprint in futureSprints()")
+            else:
+                clauses.append(f'sprint = "{_jql(sprint)}"')
         jql = " AND ".join(clauses)
         data = self._run_cli(
             [
