@@ -6,6 +6,7 @@ import pytest
 from harness.adapters.acli_jira import AcliJiraAdapter
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
+from harness.adapters.jira_rest import JiraRestBoardAdapter
 from harness.engine.board import IssueBoard, render_boards
 from harness.models import IssueQuery, OpenIssue
 
@@ -163,6 +164,24 @@ def test_jira_list_applies_sprint_filter(mocker, sprint, expected):
 
     argv = run.call_args.args[0]
     assert expected in argv[argv.index("--jql") + 1]
+
+
+def test_jira_rest_board_query_is_read_only_and_uses_same_jql(mocker):
+    response = mocker.Mock()
+    response.__enter__ = mocker.Mock(return_value=response)
+    response.__exit__ = mocker.Mock(return_value=False)
+    response.read.return_value = json.dumps({"issues": []}).encode()
+    mocker.patch("urllib.request.OpenerDirector.open", return_value=response)
+    request = mocker.patch("urllib.request.Request", autospec=True)
+    adapter = JiraRestBoardAdapter(
+        "https://jira.example", "user@example", "token", "TEST"
+    )
+
+    assert (
+        adapter.list_issues(IssueQuery(("assigned",), ("@me",), sprint="active")) == []
+    )
+    assert "sprint in openSprints()" in request.call_args.kwargs["data"].decode()
+    assert response.read.called
 
 
 def test_renderer_creates_separate_boards_with_direct_links_and_safe_text():

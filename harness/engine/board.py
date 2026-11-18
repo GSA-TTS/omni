@@ -12,6 +12,7 @@ from harness.adapters.acli_jira import AcliJiraAdapter
 from harness.adapters.base import AdapterError
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.gitlab import GitLabAdapter
+from harness.adapters.jira_rest import JiraRestBoardAdapter
 from harness.identity import UserRoster
 from harness.models import IssueQuery, OpenIssue
 from harness.targets import resolve_gitlab_target
@@ -178,7 +179,32 @@ def _collect_jira(boards, errors, cfg, board_urls, roster, query) -> None:
             IssueBoard("Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url))
         )
     except AdapterError as exc:
-        _failed_board(boards, errors, "Jira", "jira", ticket_url, "jira-mod", str(exc))
+        email = os.environ.get("JIRA_EMAIL")
+        token = os.environ.get("JIRA_API_TOKEN")
+        if not email or not token:
+            _failed_board(
+                boards, errors, "Jira", "jira", ticket_url, "jira-mod", str(exc)
+            )
+            return
+        try:
+            issues = JiraRestBoardAdapter(base_url, email, token, project).list_issues(
+                jira_query
+            )
+            boards.append(
+                IssueBoard(
+                    "Jira", "jira", ticket_url, _with_ticket_url(issues, ticket_url)
+                )
+            )
+        except AdapterError:
+            _failed_board(
+                boards,
+                errors,
+                "Jira",
+                "jira",
+                ticket_url,
+                "jira-mod",
+                "acli and Jira REST board queries failed",
+            )
 
 
 def _failed_board(boards, errors, name, slug, ticket_url, target, message) -> None:
