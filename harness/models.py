@@ -81,6 +81,7 @@ class IssueQuery:
     labels: tuple[str, ...] = ()
     search: str | None = None
     limit: int = 100
+    sprint: str | None = None
 
 
 @dataclass
