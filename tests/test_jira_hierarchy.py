@@ -1,7 +1,9 @@
+import pytest
 from typer.testing import CliRunner
 
 from harness import cli
 from harness.adapters.acli_jira import AcliJiraAdapter
+from harness.adapters.base import AdapterError
 from harness.adapters.jira_rest import JiraRestHierarchyAdapter
 
 
@@ -33,6 +35,27 @@ def test_rest_hierarchy_sets_parent_only(mocker):
         "/rest/api/3/issue/TEST-2",
         {"fields": {"parent": {"key": "TEST-1"}}},
     )
+
+
+def test_rest_hierarchy_accepts_empty_successful_parent_update(mocker):
+    response = mocker.MagicMock()
+    response.__enter__.return_value = response
+    response.read.return_value = b""
+    mocker.patch("urllib.request.urlopen", return_value=response)
+    adapter = JiraRestHierarchyAdapter("https://jira.example", "u", "t", "TEST")
+
+    adapter.set_parent("TEST-2", "TEST-1")
+
+
+def test_rest_hierarchy_rejects_non_json_nonempty_update_response(mocker):
+    response = mocker.MagicMock()
+    response.__enter__.return_value = response
+    response.read.return_value = b"not-json"
+    mocker.patch("urllib.request.urlopen", return_value=response)
+    adapter = JiraRestHierarchyAdapter("https://jira.example", "u", "t", "TEST")
+
+    with pytest.raises(AdapterError, match="Jira REST board query failed"):
+        adapter.set_parent("TEST-2", "TEST-1")
 
 
 def test_hierarchy_dry_run_requires_expected_current_state(

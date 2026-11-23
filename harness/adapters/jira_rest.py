@@ -70,8 +70,14 @@ class JiraRestBoardAdapter:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                data = json.load(response)
+                raw = response.read()
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            raise AdapterError("Jira REST board query failed") from exc
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError) as exc:
             raise AdapterError("Jira REST board query failed") from exc
         if not isinstance(data, dict):
             raise AdapterError("Unexpected Jira REST response")
