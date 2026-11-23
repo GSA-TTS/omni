@@ -33,6 +33,8 @@ class CanonicalIssue:
     priority: str | None = None
     labels: list[str] = field(default_factory=list)
     assignees: list[str] = field(default_factory=list)
+    jira_issue_type: str | None = None
+    jira_parent: str | None = None
     uuid: str = field(default_factory=lambda: f"urn:fed:sync:{uuid.uuid4().hex[:12]}")
     sync_metadata: dict[str, str] = field(default_factory=dict)
 

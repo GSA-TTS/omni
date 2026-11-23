@@ -202,14 +202,40 @@ def create(
         "--assignee",
         help="Email (mapped per host via users.toml) or username; repeatable",
     ),
+    jira_type: str | None = typer.Option(
+        None,
+        "--jira-type",
+        help="Jira work-item type; valid only when --to jira-mod is selected",
+    ),
+    parent: str | None = typer.Option(
+        None,
+        "--parent",
+        help="Jira parent work-item key; valid only when --to jira-mod is selected",
+    ),
 ) -> None:
     """Create the same issue across one or more target systems."""
+    # Direct Python callers from before Jira-specific creation options were
+    # added leave Typer's OptionInfo defaults in place.
+    if not isinstance(jira_type, str):
+        jira_type = None
+    if not isinstance(parent, str):
+        parent = None
+    if (jira_type or parent) and "jira-mod" not in to:
+        raise typer.BadParameter("--jira-type and --parent require --to jira-mod")
+    if jira_type is not None and not jira_type.strip():
+        raise typer.BadParameter("--jira-type cannot be empty")
+    if parent is not None and not parent.strip():
+        raise typer.BadParameter("--parent cannot be empty")
+
     results: dict[str, str] = {}
     any_fail = False
 
     for target in to:
         adapter = _resolve_adapter(target)
         canonical = CanonicalIssue.create_new(title=title, body_markdown=body)
+        if target == "jira-mod":
+            canonical.jira_issue_type = jira_type
+            canonical.jira_parent = parent
         canonical.assignees = _resolve_assignees(target, assignee or [])
         try:
             remote_id = adapter.create_issue(canonical)
