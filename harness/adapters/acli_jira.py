@@ -145,6 +145,9 @@ class AcliJiraAdapter(BaseIssueAdapter):
     # ---- writes ------------------------------------------------------------
 
     def create_issue(self, issue: CanonicalIssue) -> str:
+        issue_type = (issue.jira_issue_type or "Task").strip()
+        if not issue_type:
+            raise AdapterError("Jira work item type cannot be empty")
         argv = [
             self.acli_bin,
             "jira",
@@ -153,10 +156,14 @@ class AcliJiraAdapter(BaseIssueAdapter):
             "--project",
             self.project_key,
             "--type",
-            "Task",
+            issue_type,
             "--summary",
             issue.title,
         ]
+        if issue.body_markdown:
+            argv += ["--description", issue.body_markdown]
+        if issue.jira_parent:
+            argv += ["--parent", issue.jira_parent]
         if issue.labels:
             argv += ["--labels", ",".join(sorted(set(issue.labels)))]
         key = self._run_cli(argv, parse_json=False)

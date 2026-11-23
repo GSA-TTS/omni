@@ -63,6 +63,42 @@ class TestAcliJiraAdapter:
         assert "--description" not in argv
         assert "--assignee" in argv and "--labels" in argv
 
+    def test_create_supports_epic_description_and_parent(self, mocker):
+        run_mock = mocker.patch(
+            "subprocess.run", return_value=_mock_completed("FPDF-900")
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+        from harness.models import CanonicalIssue
+
+        key = adapter.create_issue(
+            CanonicalIssue.create_new(
+                title="DQX remediation",
+                body_markdown="Acceptance criteria",
+                jira_issue_type="Story",
+                jira_parent="FPDF-899",
+            )
+        )
+
+        assert key == "FPDF-900"
+        argv = run_mock.call_args.args[0]
+        assert argv[argv.index("--type") + 1] == "Story"
+        assert argv[argv.index("--description") + 1] == "Acceptance criteria"
+        assert argv[argv.index("--parent") + 1] == "FPDF-899"
+
+    def test_create_defaults_to_task_without_optional_jira_fields(self, mocker):
+        run_mock = mocker.patch(
+            "subprocess.run", return_value=_mock_completed("FPDF-900")
+        )
+        adapter = AcliJiraAdapter("acli", "FPDF")
+        from harness.models import CanonicalIssue
+
+        adapter.create_issue(CanonicalIssue.create_new(title="T", body_markdown=""))
+
+        argv = run_mock.call_args.args[0]
+        assert argv[argv.index("--type") + 1] == "Task"
+        assert "--description" not in argv
+        assert "--parent" not in argv
+
     def test_edit_no_op_when_nothing_to_change(self, mocker):
         run_mock = mocker.patch("subprocess.run")
         adapter = AcliJiraAdapter("acli", "FPDF")
