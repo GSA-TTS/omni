@@ -213,6 +213,30 @@ class AcliJiraAdapter(BaseIssueAdapter):
 
     # ---- comments ----------------------------------------------------------
 
+    def append_comment(self, issue_id: str, body: str) -> None:
+        """Append a standalone human-readable comment without reading or editing others.
+
+        This intentionally does not reuse ``upsert_sync_comment``: review and
+        operational notes must never be marked as, or overwrite, managed
+        ``[github-sync]`` state.
+        """
+        if not body.strip():
+            raise AdapterError("Jira comment body cannot be empty")
+        self._run_cli(
+            [
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "comment",
+                "create",
+                "--key",
+                issue_id,
+                "--body",
+                body,
+            ],
+            parse_json=False,
+        )
+
     def list_comments(self, issue_id: str) -> list[dict]:
         data = self._run_cli(
             [
