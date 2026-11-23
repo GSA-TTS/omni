@@ -17,7 +17,6 @@ from harness.adapters.base import AdapterError, BaseIssueAdapter
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.github_rest import GitHubRestAdapter
 from harness.adapters.gitlab import GitLabAdapter
-from harness.adapters.jira import JiraAdapter
 from harness.config import load_config
 from harness.config_writer import (
     build_project_toml,
@@ -141,20 +140,10 @@ def _gitlab_cloudgov(repo: str) -> GitLabAdapter:
     )
 
 
-def _jira_mod(project: str) -> JiraAdapter:
-    return JiraAdapter(
-        os.environ.get(
-            "JIRA_INSTANCE_URL", "https://gsa-standard.atlassian-us-gov-mod.net"
-        ),
-        project,
-    )
-
-
 _ADAPTER_BUILDERS = {
     "gh-tts": _github_com,
     "gh-helix": _github_helix,
     "gl-cg": _gitlab_cloudgov,
-    "jira-mod": _jira_mod,
 }
 
 # target -> repo/project identifier. In real usage these come from a config
@@ -169,9 +158,9 @@ _TARGET_RESOURCE_ENV = {
 
 def _resolve_adapter(target: str) -> BaseIssueAdapter:
     _load_dotenv()
-    if target not in _ADAPTER_BUILDERS:
+    if target not in _TARGET_RESOURCE_ENV:
         raise typer.BadParameter(
-            f"Unknown target '{target}'. Valid: {', '.join(_ADAPTER_BUILDERS)}"
+            f"Unknown target '{target}'. Valid: {', '.join(_TARGET_RESOURCE_ENV)}"
         )
     if target == "gl-cg":
         cfg = load_config(_runtime_config())
@@ -181,6 +170,10 @@ def _resolve_adapter(target: str) -> BaseIssueAdapter:
                 "Set [gitlab].project or GL_CG_REPO for target 'gl-cg'"
             )
         return GitLabAdapter(host, resource)
+    if target == "jira-mod":
+        cfg = load_config(_runtime_config())
+        project = os.environ.get("JIRA_MOD_PROJECT") or cfg["jira"]["project_key"]
+        return AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), project)
     resource_env = _TARGET_RESOURCE_ENV[target]
     resource = os.environ.get(resource_env)
     if not resource:
@@ -922,8 +915,8 @@ def bench(
     _load_dotenv(config.parent / ".env")
 
     def build_adapter():
-        # Jira benchmarking uses the acli adapter (the gh-jira flow), not the
-        # jira-cli-based JiraAdapter that `_resolve_adapter` returns.
+        # Jira benchmarking uses the same GovCloud acli adapter as create and
+        # the gh-jira flow.
         if target == "jira-mod":
             cfg = load_config(config)
             return AcliJiraAdapter(
