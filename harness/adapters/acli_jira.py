@@ -181,6 +181,25 @@ class AcliJiraAdapter(BaseIssueAdapter):
             add_labels=issue.labels,
         )
 
+    def change_type(self, issue_id: str, issue_type: str) -> None:
+        """Change only a work-item type; never edits description or comments."""
+        if not issue_type.strip():
+            raise AdapterError("Jira work item type cannot be empty")
+        self._run_cli(
+            [
+                self.acli_bin,
+                "jira",
+                "workitem",
+                "edit",
+                "--key",
+                issue_id,
+                "--type",
+                issue_type,
+                "--yes",
+            ],
+            parse_json=False,
+        )
+
     def edit(
         self,
         issue_id: str,

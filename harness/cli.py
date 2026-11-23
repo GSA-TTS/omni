@@ -17,6 +17,7 @@ from harness.adapters.base import AdapterError, BaseIssueAdapter
 from harness.adapters.github import GitHubAdapter
 from harness.adapters.github_rest import GitHubRestAdapter
 from harness.adapters.gitlab import GitLabAdapter
+from harness.adapters.jira_rest import JiraRestHierarchyAdapter
 from harness.config import load_config
 from harness.config_writer import (
     build_project_toml,
@@ -263,6 +264,68 @@ def comment(
         raise AdapterError("jira-mod must resolve to the GovCloud Acli Jira adapter")
     adapter.append_comment(key, body)
     typer.echo(f"Comment appended on {to}: {key}")
+
+
+@app.command(name="jira-hierarchy")
+def jira_hierarchy(
+    key: str,
+    expected_type: str = typer.Option(..., "--expected-type"),
+    expected_parent: str = typer.Option("<none>", "--expected-parent"),
+    parent: str = typer.Option(..., "--parent"),
+    issue_type: str | None = typer.Option(None, "--issue-type"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply"),
+) -> None:
+    """Verify and update one Jira work item's parent and optional type."""
+    if not key.strip() or not expected_type.strip() or not parent.strip():
+        raise typer.BadParameter("key, expected type, and parent cannot be empty")
+    if issue_type is not None and not issue_type.strip():
+        raise typer.BadParameter("--issue-type cannot be empty")
+    config = _runtime_config()
+    _load_dotenv(config.parent / ".env")
+    cfg = load_config(config)
+    base_url = cfg.get("jira", {}).get("base_url") or os.environ.get(
+        "JIRA_INSTANCE_URL"
+    )
+    email = os.environ.get("JIRA_EMAIL")
+    token = os.environ.get("JIRA_API_TOKEN")
+    if not base_url or not email or not token:
+        raise AdapterError("Jira hierarchy update requires URL, email, and API token")
+    project = os.environ.get("JIRA_MOD_PROJECT") or cfg["jira"]["project_key"]
+    rest = JiraRestHierarchyAdapter(base_url, email, token, project)
+    observed_type, observed_parent = rest.get_hierarchy(key)
+    normalized_expected_parent = (
+        None if expected_parent == "<none>" else expected_parent
+    )
+    if (observed_type, observed_parent) != (expected_type, normalized_expected_parent):
+        raise AdapterError(
+            "Jira hierarchy changed since review; expected "
+            f"type={expected_type!r}, parent={normalized_expected_parent!r}; observed "
+            f"type={observed_type!r}, parent={observed_parent!r}"
+        )
+    target_type = issue_type or observed_type
+    if dry_run:
+        typer.echo(
+            f"dry-run: {key} type {observed_type!r}->{target_type!r}, "
+            f"parent {observed_parent!r}->{parent!r}"
+        )
+        return
+    if target_type != observed_type:
+        acli = AcliJiraAdapter(cfg["jira"].get("acli_bin", "acli"), project)
+        acli.change_type(key, target_type)
+        current_type, current_parent = rest.get_hierarchy(key)
+        if current_type != target_type:
+            raise AdapterError(
+                "Jira type update did not persist; parent was not changed"
+            )
+    rest.set_parent(key, parent)
+    final_type, final_parent = rest.get_hierarchy(key)
+    if (final_type, final_parent) != (target_type, parent):
+        raise AdapterError(
+            "Jira parent update did not persist; inspect current hierarchy before retrying"
+        )
+    typer.echo(
+        f"Updated Jira hierarchy: {key} type={final_type}, parent={final_parent}"
+    )
 
 
 @app.command()

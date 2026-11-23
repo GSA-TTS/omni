@@ -7,6 +7,7 @@ import json
 import urllib.error
 import urllib.request
 from dataclasses import replace
+from urllib.parse import quote
 
 from harness.adapters.acli_jira import build_jql, issues_from_search
 from harness.adapters.base import AdapterError
@@ -75,3 +76,30 @@ class JiraRestBoardAdapter:
         if not isinstance(data, dict):
             raise AdapterError("Unexpected Jira REST response")
         return data
+
+
+class JiraRestHierarchyAdapter(JiraRestBoardAdapter):
+    """Narrow Jira REST adapter for verified parent reassignment only."""
+
+    def get_hierarchy(self, issue_id: str) -> tuple[str, str | None]:
+        data = self._request(
+            "GET",
+            f"/rest/api/3/issue/{quote(issue_id, safe='')}?fields=issuetype,parent",
+        )
+        fields = data.get("fields") or {}
+        issue_type = (fields.get("issuetype") or {}).get("name")
+        parent = (fields.get("parent") or {}).get("key")
+        if not isinstance(issue_type, str) or not issue_type:
+            raise AdapterError("Jira hierarchy read returned no issue type")
+        if parent is not None and not isinstance(parent, str):
+            raise AdapterError("Jira hierarchy read returned an invalid parent key")
+        return issue_type, parent
+
+    def set_parent(self, issue_id: str, parent_key: str) -> None:
+        if not parent_key.strip():
+            raise AdapterError("Jira parent key cannot be empty")
+        self._request(
+            "PUT",
+            f"/rest/api/3/issue/{quote(issue_id, safe='')}",
+            {"fields": {"parent": {"key": parent_key}}},
+        )
