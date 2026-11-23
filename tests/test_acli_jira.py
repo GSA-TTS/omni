@@ -113,6 +113,28 @@ class TestAcliJiraAdapter:
         assert ok and msg.startswith("dry-run:")
         run_mock.assert_not_called()
 
+    def test_append_comment_creates_without_reading_or_updating_comments(self, mocker):
+        run_mock = mocker.patch("subprocess.run", return_value=_mock_completed(""))
+        adapter = AcliJiraAdapter("acli", "FPDF")
+
+        adapter.append_comment("FPDF-402", "Schema review complete")
+
+        assert run_mock.call_count == 1
+        argv = run_mock.call_args.args[0]
+        assert argv[:5] == ["acli", "jira", "workitem", "comment", "create"]
+        assert "list" not in argv
+        assert "update" not in argv
+        assert "[github-sync]" not in argv
+
+    def test_append_comment_rejects_blank_body(self, mocker):
+        run_mock = mocker.patch("subprocess.run")
+        adapter = AcliJiraAdapter("acli", "FPDF")
+
+        with pytest.raises(AdapterError, match="body cannot be empty"):
+            adapter.append_comment("FPDF-402", " \n ")
+
+        run_mock.assert_not_called()
+
     def test_upsert_sync_comment_updates_existing_in_place(self, mocker):
         comments = {
             "comments": [

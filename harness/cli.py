@@ -244,6 +244,28 @@ def create(
 
 
 @app.command()
+def comment(
+    key: str,
+    body: str,
+    to: str = typer.Option("jira-mod", "--to", help="Only jira-mod is supported"),
+) -> None:
+    """Append a standalone review or operational comment to a Jira work item."""
+    if not isinstance(to, str):
+        to = "jira-mod"
+    if to != "jira-mod":
+        raise typer.BadParameter("comment supports only --to jira-mod")
+    if not key.strip():
+        raise typer.BadParameter("work-item key cannot be empty")
+    if not body.strip():
+        raise typer.BadParameter("comment body cannot be empty")
+    adapter = _resolve_adapter(to)
+    if not isinstance(adapter, AcliJiraAdapter):
+        raise AdapterError("jira-mod must resolve to the GovCloud Acli Jira adapter")
+    adapter.append_comment(key, body)
+    typer.echo(f"Comment appended on {to}: {key}")
+
+
+@app.command()
 def board(
     config: Path | None = typer.Option(
         None, "--config", help="Path to omni-project.toml"
