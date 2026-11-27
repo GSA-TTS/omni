@@ -222,6 +222,33 @@ def test_jira_rest_caps_page_size_at_100(mocker):
     assert json.loads(urlopen.call_args.args[0].data)["maxResults"] == 100
 
 
+def test_jira_rest_paginates_with_continuation_token(mocker):
+    urlopen = _urlopen_responses(
+        mocker,
+        {
+            "issues": [
+                {"key": f"TEST-{number}", "fields": {"summary": "first"}}
+                for number in range(1, 101)
+            ],
+            "nextPageToken": "next",
+        },
+        {"issues": [{"key": "TEST-2", "fields": {"summary": "second"}}]},
+    )
+
+    issues = _rest_adapter().list_issues(
+        IssueQuery(("assigned",), ("alice",), limit=150)
+    )
+
+    assert len(issues) == 101
+    assert issues[0].issue_id == "TEST-1"
+    assert issues[-1].issue_id == "TEST-2"
+    first, second = (json.loads(call.args[0].data) for call in urlopen.call_args_list)
+    assert first["maxResults"] == 100
+    assert "nextPageToken" not in first
+    assert second["maxResults"] == 50
+    assert second["nextPageToken"] == "next"
+
+
 def test_jira_rest_rejects_missing_account_id(mocker):
     _urlopen_responses(mocker, {})
 
